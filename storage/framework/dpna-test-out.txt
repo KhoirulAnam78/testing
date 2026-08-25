@@ -1,0 +1,74 @@
+
+  [30;42;1m PASS [39;49;22m[39m Tests\Unit\PerhitunganDpnaBlokTest[39m
+  [32;1m✓[39;22m[90m [39m[90mnormalisasi dan rata rata memakai skala seratus[39m[90m                                                             [39m [90m0.01s[39m  
+  [32;1m✓[39;22m[90m [39m[90mnilai akhir adalah jumlah nilai dikali bobot[39m
+  [32;1m✓[39;22m[90m [39m[90mnilai akhir belum lengkap jika sumber aktif kosong[39m
+
+  [39;41;1m FAIL [39;49;22m[39m Tests\Feature\DpnaBlokAccessTest[39m
+  [31;1m⨯[39;22m[90m [39m[90madmin dengan permission dapat membuka daftar dan detail[39m
+  [31;1m⨯[39;22m[90m [39m[90mkoordinator hanya dapat membuka blok kelolaannya[39m
+  [31;1m⨯[39;22m[90m [39m[90mdosen biasa dan mahasiswa ditolak[39m
+  [31m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m  
+  [41;1m FAILED [49;22m [1mTests\Feature\DpnaBlokAccessTest[22m [90m>[39m admin dengan permission dapat membuka daftar dan detai… [41;1m QueryException [49;22m  
+[39;1m  could not find driver (Connection: sqlite, Database: :memory:, SQL: select exists (select 1 from "main".sqlite_master where name = 'migrations' and type = 'table') as "exists")[39;22m
+
+  at [32mvendor\laravel\framework\src\Illuminate\Database\Connection.php[39m:[32m841[39m
+    837▕             $exceptionType = ($isUniqueConstraintError = $this->isUniqueConstraintError($e))
+    838▕                 ? UniqueConstraintViolationException::class
+    839▕                 : QueryException::class;
+    840▕ 
+  ➜ 841▕             $exception = new $exceptionType(
+    842▕                 $this->getNameWithReadWriteType(),
+    843▕                 $query,
+    844▕                 $this->prepareBindings($bindings),
+    845▕                 $e,
+
+  [33m1   [39m[39;1mvendor\laravel\framework\src\Illuminate\Database\Connection.php[39;22m:[39;1m841[39;22m
+
+  [33m2   [39m[39;1mvendor\laravel\framework\src\Illuminate\Database\Connectors\Connector.php[39;22m:[39;1m66[39;22m
+  [90m    NunoMaduro\Collision\Exceptions\TestException::("could not find driver")[39m
+
+  [31m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m  
+  [41;1m FAILED [49;22m [1mTests\Feature\DpnaBlokAccessTest[22m [90m>[39m koordinator hanya dapat membuka blok kelolaannya        [41;1m QueryException [49;22m  
+[39;1m  could not find driver (Connection: sqlite, Database: :memory:, SQL: select exists (select 1 from "main".sqlite_master where name = 'migrations' and type = 'table') as "exists")[39;22m
+
+  at [32mvendor\laravel\framework\src\Illuminate\Database\Connection.php[39m:[32m841[39m
+    837▕             $exceptionType = ($isUniqueConstraintError = $this->isUniqueConstraintError($e))
+    838▕                 ? UniqueConstraintViolationException::class
+    839▕                 : QueryException::class;
+    840▕ 
+  ➜ 841▕             $exception = new $exceptionType(
+    842▕                 $this->getNameWithReadWriteType(),
+    843▕                 $query,
+    844▕                 $this->prepareBindings($bindings),
+    845▕                 $e,
+
+  [33m1   [39m[39;1mvendor\laravel\framework\src\Illuminate\Database\Connection.php[39;22m:[39;1m841[39;22m
+
+  [33m2   [39m[39;1mvendor\laravel\framework\src\Illuminate\Database\Connectors\Connector.php[39;22m:[39;1m66[39;22m
+  [90m    NunoMaduro\Collision\Exceptions\TestException::("could not find driver")[39m
+
+  [31m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m  
+  [41;1m FAILED [49;22m [1mTests\Feature\DpnaBlokAccessTest[22m [90m>[39m dosen biasa dan mahasiswa ditolak                       [41;1m QueryException [49;22m  
+[39;1m  could not find driver (Connection: sqlite, Database: :memory:, SQL: select exists (select 1 from "main".sqlite_master where name = 'migrations' and type = 'table') as "exists")[39;22m
+
+  at [32mvendor\laravel\framework\src\Illuminate\Database\Connection.php[39m:[32m841[39m
+    837▕             $exceptionType = ($isUniqueConstraintError = $this->isUniqueConstraintError($e))
+    838▕                 ? UniqueConstraintViolationException::class
+    839▕                 : QueryException::class;
+    840▕ 
+  ➜ 841▕             $exception = new $exceptionType(
+    842▕                 $this->getNameWithReadWriteType(),
+    843▕                 $query,
+    844▕                 $this->prepareBindings($bindings),
+    845▕                 $e,
+
+  [33m1   [39m[39;1mvendor\laravel\framework\src\Illuminate\Database\Connection.php[39;22m:[39;1m841[39;22m
+
+  [33m2   [39m[39;1mvendor\laravel\framework\src\Illuminate\Database\Connectors\Connector.php[39;22m:[39;1m66[39;22m
+  [90m    NunoMaduro\Collision\Exceptions\TestException::("could not find driver")[39m
+
+
+  [90mTests:[39m    [31;1m3 failed[39;22m[90m,[39m[39m [39m[32;1m3 passed[39;22m[90m (6 assertions)[39m
+  [90mDuration:[39m [39m0.83s[39m
+
