@@ -17,7 +17,7 @@ class LogbookPertemuanBlokTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_flag_nonaktif_menolak_akses_server(): void
+    public function test_flag_blok_nonaktif_menolak_akses_server(): void
     {
         $data = $this->fixture(false);
 
@@ -31,6 +31,28 @@ class LogbookPertemuanBlokTest extends TestCase
 
         Livewire::test('logbook-pertemuan', ['pertemuan_blok_id' => $data['pertemuan']])
             ->assertNotFound();
+    }
+
+    public function test_monitoring_belum_divalidasi_menolak_unggahan(): void
+    {
+        Storage::fake('local');
+        $data = $this->fixture(true, false);
+
+        $this->actingAs($data['mahasiswa']);
+
+        $this->assertFalse(AksesPertemuanBlok::bolehUnggahLogbook(
+            $data['mahasiswa'],
+            $data['pertemuan'],
+            $data['mahasiswa_id']
+        ));
+
+        Livewire::test('logbook-pertemuan', ['pertemuan_blok_id' => $data['pertemuan']])
+            ->assertSee('Logbook dapat diunggah setelah monitoring pertemuan divalidasi.')
+            ->set('file', UploadedFile::fake()->createWithContent('logbook.pdf', "%PDF-1.4\nuji"))
+            ->call('unggah')
+            ->assertForbidden();
+
+        $this->assertDatabaseEmpty('logbook_pertemuan_blok');
     }
 
     public function test_mahasiswa_hanya_dapat_mengunggah_logbook_pertemuan_kelompoknya(): void
@@ -52,6 +74,7 @@ class LogbookPertemuanBlokTest extends TestCase
         $logbook = LogbookPertemuanBlok::firstOrFail();
         $this->assertSame('menunggu', $logbook->status);
         $this->assertSame('logbook.pdf', $logbook->nama_file_asli);
+        $this->assertSame(strlen("%PDF-1.4\nuji"), $logbook->ukuran_file);
         Storage::disk('local')->assertExists($logbook->path_file);
     }
 
@@ -98,6 +121,25 @@ class LogbookPertemuanBlokTest extends TestCase
         $this->assertSame('valid', $logbook->status);
         $this->assertNull($logbook->catatan_validasi);
         $this->assertNotNull($logbook->divalidasi_pada);
+    }
+
+    public function test_tab_operasional_menampilkan_pertemuan_dan_membuka_status_logbook_di_modal(): void
+    {
+        $data = $this->fixture();
+
+        Permission::findOrCreate(AksesPertemuanBlok::IZIN_PENGELOLA);
+        $data['dosen']->givePermissionTo(AksesPertemuanBlok::IZIN_PENGELOLA);
+        $this->actingAs($data['dosen']);
+
+        Livewire::test('blok-operasional.logbook', ['blok_id' => $data['blok']])
+            ->assertSee('Pertemuan Uji')
+            ->assertSee('Logbook')
+            ->assertDontSee('Mahasiswa Uji')
+            ->call('bukaLogbook', (string) $data['pertemuan'])
+            ->assertSet('logbook_pertemuan_id', $data['pertemuan'])
+            ->assertDispatched('show-logbook-modal')
+            ->assertSee('Mahasiswa Uji')
+            ->assertSee('Belum Unggah');
     }
 
     public function test_validator_tidak_sah_ditolak_dan_pengelola_dapat_memvalidasi(): void
@@ -177,7 +219,7 @@ class LogbookPertemuanBlokTest extends TestCase
         ]);
     }
 
-    private function fixture(bool $aktif = true): array
+    private function fixture(bool $aktif = true, bool $monitoringTervalidasi = true): array
     {
         $mahasiswaUser = User::factory()->create();
         $dosenUser = User::factory()->create();
@@ -218,12 +260,10 @@ class LogbookPertemuanBlokTest extends TestCase
             'nama' => 'Tutorial Uji',
             'jumlah_pertemuan_default' => 1,
             'durasi_menit_default' => 100,
-            'perlu_logbook' => $aktif,
         ]);
         $aturan = DB::table('aturan_kegiatan_blok')->insertGetId([
             'blok_id' => $blok,
             'jenis_kegiatan_id' => $jenis,
-            'jumlah_pertemuan' => 1,
             'durasi_menit' => 100,
             'perlu_kelompok' => true,
             'perlu_logbook' => $aktif,
@@ -261,7 +301,16 @@ class LogbookPertemuanBlokTest extends TestCase
             'dosen_id' => $dosen,
         ]);
 
+        DB::table('monitoring_pertemuan_blok')->insert([
+            'pertemuan_blok_id' => $pertemuan,
+            'divalidasi_pada' => $monitoringTervalidasi ? now() : null,
+            'divalidasi_oleh_user_id' => $monitoringTervalidasi ? $dosenUser->id : null,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
         return [
+            'blok' => $blok,
             'mahasiswa' => $mahasiswaUser,
             'mahasiswa_id' => $mahasiswa,
             'dosen' => $dosenUser,

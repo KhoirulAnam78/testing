@@ -58,8 +58,8 @@ new #[Layout('layouts.app')] class extends Component {
                     <div class="row align-items-center">
                         <div class="col-6"><h5>Daftar Dosen</h5></div>
                         <div class="col-6 text-end d-flex justify-content-end gap-2">
-                            <button type="button" wire:click="template" wire:loading.attr="disabled" wire:target="template,import" class="btn btn-outline-secondary btn-sm">
-                                <i class="ri-file-excel-2-line"></i> Template
+                            <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modal-import-dosen">
+                                <i class="ri-upload-2-line"></i> Import
                             </button>
                             <a href="{{ route('dosen.add_edit', ['id' => 'add']) }}" wire:navigate wire:loading.class="pe-none disabled" wire:target="template,import" class="btn btn-primary btn-sm">
                                 <i class="ri-add-box-fill"></i> Tambah
@@ -69,23 +69,36 @@ new #[Layout('layouts.app')] class extends Component {
                 </div>
                 <div class="card-body">
                     <livewire:alert/>
-                    <form wire:submit="import" class="d-flex flex-column flex-lg-row align-items-lg-center gap-2 mb-3">
-                        <label class="form-label mb-0 text-muted flex-shrink-0" style="min-width: 110px;">Import Dosen</label>
-                        <div class="flex-grow-1">
-                            <input type="file" class="form-control form-control-sm" wire:model="importFile" wire:loading.attr="disabled" wire:target="import" accept=".xlsx,.xls,.csv">
-                            @error('importFile') <div class="small text-danger mt-1">{{ $message }}</div> @enderror
-                            @error('import_dosen') <div class="small text-danger mt-1">{{ $message }}</div> @enderror
-                        </div>
-                        <div class="flex-shrink-0">
-                            <button type="submit" class="btn btn-outline-primary btn-sm w-100" wire:loading.attr="disabled" wire:target="template,import">
-                                <span wire:loading.remove wire:target="import"><i class="ri-upload-2-line"></i> Import</span>
-                                <span wire:loading wire:target="import">Memproses...</span>
-                            </button>
-                        </div>
-                    </form>
                     <livewire:table-dosen lazy />
                 </div>
             </div>
+        </div>
+    </div>
+
+    <div wire:ignore.self class="modal fade" id="modal-import-dosen" tabindex="-1" aria-labelledby="modal-import-dosen-label" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <form wire:submit="import" class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modal-import-dosen-label">Template Import</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+                </div>
+                <div class="modal-body">
+                    <button type="button" wire:click="template" wire:loading.attr="disabled" wire:target="template,import" class="btn btn-secondary btn-sm mb-3 d-block">
+                        <i class="ri-file-excel-2-line"></i> Template Import
+                    </button>
+                    <label for="import-file-dosen" class="form-label">File Import Dosen</label>
+                    <input id="import-file-dosen" type="file" class="form-control" wire:model="importFile" wire:loading.attr="disabled" wire:target="import" accept=".xlsx,.xls,.csv">
+                    @error('importFile') <div class="small text-danger mt-1">{{ $message }}</div> @enderror
+                    @error('import_dosen') <div class="small text-danger mt-1">{{ $message }}</div> @enderror
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Batal</button>
+                    <button type="submit" class="btn btn-primary" wire:loading.attr="disabled" wire:target="template,import">
+                        <span wire:loading.remove wire:target="import"><i class="ri-upload-2-line"></i> Import</span>
+                        <span wire:loading wire:target="import">Memproses...</span>
+                    </button>
+                </div>
+            </form>
         </div>
     </div>
 </div>

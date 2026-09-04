@@ -46,7 +46,7 @@ final class PerhitunganDpnaBlok
         $blok->loadMissing([
             'aturan_kegiatan_blok' => fn ($query) => $query
                 ->with('jenis_kegiatan:id,kode,nama')
-                ->withCount(['komponen_penilaian_blok', 'pertemuan_blok'])
+                ->withCount(['komponen_penilaian_blok', 'pertemuan_blok', 'materi_rinci_blok'])
                 ->orderBy('urutan'),
         ]);
 
@@ -96,9 +96,12 @@ final class PerhitunganDpnaBlok
             $wajibPresensiIds = $blok->aturan_kegiatan_blok
                 ->where('perlu_presensi', true)
                 ->flatMap(fn ($aturan) => $pertemuanByKegiatan->get($aturan->id, collect())->pluck('id_pertemuan_blok'));
+            // Jumlah pertemuan yang seharusnya diikuti satu peserta = jumlah rincian materi
+            // kegiatan itu, karena satu pertemuan lahir dari satu rincian dikali satu
+            // kelompok dan tiap peserta hanya masuk satu kelompok per kegiatan.
             $jumlahPresensiWajib = (int) $blok->aturan_kegiatan_blok
                 ->where('perlu_presensi', true)
-                ->sum('jumlah_pertemuan');
+                ->sum('materi_rinci_blok_count');
             $presensiWajib = $presensiPeserta->whereIn('pertemuan_blok_id', $wajibPresensiIds);
             $kehadiran = $jumlahPresensiWajib === 0
                 || $wajibPresensiIds->count() !== $jumlahPresensiWajib
@@ -114,7 +117,7 @@ final class PerhitunganDpnaBlok
                     fn ($pertemuanId) => (int) $jumlahKomponenTerisi->get($pesertaId.'-'.$pertemuanId)?->total === $aturan->komponen_penilaian_blok_count
                 );
                 $lengkap = $ids->isNotEmpty()
-                    && $ids->count() === $aturan->jumlah_pertemuan
+                    && $ids->count() === (int) $aturan->materi_rinci_blok_count
                     && $aturan->komponen_penilaian_blok_count > 0
                     && $nilai->count() === $ids->count()
                     && $komponenLengkap;

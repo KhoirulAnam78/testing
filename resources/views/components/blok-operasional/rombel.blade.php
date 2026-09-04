@@ -146,7 +146,7 @@ new class extends Component
             <div class="card-header d-flex justify-content-between align-items-center">
                 <h5 class="mb-0">{{ $edit_id ? 'Edit Rombel' : 'Tambah Rombel' }}</h5>
                 @if ($edit_id)
-                    <button type="button" class="btn btn-outline-secondary btn-sm" wire:click="resetForm">Batal</button>
+                    <button type="button" class="btn btn-secondary btn-sm" wire:click="resetForm">Batal</button>
                 @endif
             </div>
             <div class="card-body">

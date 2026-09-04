@@ -55,9 +55,6 @@ final class TableJenisKegiatan extends PowerGridComponent
             ->add('nama')
             ->add('jumlah_pertemuan_default')
             ->add('durasi_menit_default')
-            ->add('pakai_cbt_label', fn ($row) => $row->pakai_cbt
-                ? '<span class="badge bg-primary">Ya</span>'
-                : '<span class="badge bg-secondary">Tidak</span>')
             ->add('komponen_penilaian', fn ($row) => $row->komponen_penilaian_aktif_count > 0
                 ? '<span class="badge bg-success">Ada ('.$row->komponen_penilaian_aktif_count.' komponen)</span>'
                 : '<span class="badge bg-secondary">Tidak ada</span>')
@@ -74,7 +71,6 @@ final class TableJenisKegiatan extends PowerGridComponent
             Column::make('Nama', 'nama')->searchable()->sortable(),
             Column::make('Pertemuan Default', 'jumlah_pertemuan_default')->sortable(),
             Column::make('Durasi Default', 'durasi_menit_default')->sortable(),
-            Column::make('CBT', 'pakai_cbt_label', 'pakai_cbt')->sortable(),
             Column::make('Komponen Penilaian', 'komponen_penilaian'),
             Column::make('Status', 'status')->sortable(),
             Column::action('Aksi'),

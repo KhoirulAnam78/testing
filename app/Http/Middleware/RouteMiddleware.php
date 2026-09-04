@@ -35,7 +35,8 @@ class RouteMiddleware
             return $next($request);
         }
 
-        if (str_starts_with($routeName, 'dpna-blok.') && $this->bolehMengelolaDpna($request)) {
+        if ((str_starts_with($routeName, 'dpna-blok.') || str_starts_with($routeName, 'blok-operasional.'))
+            && $this->bolehMengelolaBlok($request)) {
             return $next($request);
         }
 
@@ -60,7 +61,7 @@ class RouteMiddleware
             ->with('failed', 'Anda tidak memiliki akses ke halaman ini.');
     }
 
-    private function bolehMengelolaDpna(Request $request): bool
+    private function bolehMengelolaBlok(Request $request): bool
     {
         $query = Blok::query()->dapatDikelolaOleh($request->user());
         $encryptedId = $request->route('id');

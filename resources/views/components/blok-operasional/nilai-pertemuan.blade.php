@@ -1,5 +1,7 @@
 <?php
 
+use App\Exports\NilaiPertemuanTemplateExport;
+use App\Imports\NilaiPertemuanImport;
 use App\Models\KomponenPenilaianBlok;
 use App\Models\NilaiPertemuanBlok;
 use App\Models\PertemuanBlok;
@@ -8,7 +10,10 @@ use App\Models\RekapNilaiPertemuanBlok;
 use App\Support\AksesPertemuanBlok;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Livewire\Component;
+use Livewire\WithFileUploads;
+use Maatwebsite\Excel\Facades\Excel;
 
 /**
  * Pengisian nilai satu pertemuan: matriks mahasiswa x komponen penilaian.
@@ -22,10 +27,23 @@ use Livewire\Component;
  *
  * Baris nilai hanya ada bila terisi. Input yang dikosongkan menghapus barisnya, jadi
  * "ada baris" berarti "sudah dinilai" dan badge kelengkapan bisa dihitung dengan count.
+ *
+ * Selain diisi manual, nilai bisa diunduh sebagai template lalu diimport kembali. Karena
+ * komponen ini dipakai apa adanya oleh halaman Pertemuan Saya (dosen) dan tab Monitoring
+ * (pengelola), kedua peran mendapat template dan import yang sama; yang membedakan hanya
+ * `AksesPertemuanBlok::bolehIsiNilai()`.
  */
 new class extends Component
 {
+    use WithFileUploads;
+
     public int $pertemuan_blok_id;
+
+    /**
+     * Berkas template nilai yang diunggah. Tidak pernah dipakai sebagai sumber daftar
+     * peserta atau komponen — keduanya selalu dibaca ulang dari database.
+     */
+    public $importFile;
 
     /**
      * Nilai per peserta per komponen: $nilai[peserta_blok_id][komponen_penilaian_blok_id].
@@ -145,13 +163,38 @@ new class extends Component
         $anggota = $this->anggota();
         $komponen = $this->komponen();
 
+        if (! $this->siapDinilai($anggota, $komponen)) {
+            return;
+        }
+
+        [$rules, $messages] = $this->aturanValidasi($anggota, $komponen);
+
+        $this->validate($rules, $messages);
+
+        $this->tulisNilai($anggota, $komponen);
+
+        $this->muatNilai();
+
+        $this->dispatch('nilai-pertemuan-tersimpan');
+        $this->dispatch('notify', message: [
+            'status' => 'success',
+            'message' => 'Nilai berhasil disimpan.',
+        ]);
+    }
+
+    /**
+     * Penjaga bersama `simpan()`, `unduhTemplate()`, dan `importNilai()`. Tanpa rubrik atau
+     * tanpa anggota aktif tidak ada yang bisa dinilai maupun ditemplatekan.
+     */
+    private function siapDinilai(Collection $anggota, Collection $komponen): bool
+    {
         if ($komponen->isEmpty()) {
             $this->dispatch('notify', message: [
                 'status' => 'failed',
                 'message' => 'Rubrik penilaian kegiatan ini belum disusun.',
             ]);
 
-            return;
+            return false;
         }
 
         if ($anggota->isEmpty()) {
@@ -160,29 +203,48 @@ new class extends Component
                 'message' => 'Kelompok pertemuan ini belum punya anggota aktif.',
             ]);
 
-            return;
+            return false;
         }
 
-        [$rules, $messages] = $this->aturanValidasi($anggota, $komponen);
+        return true;
+    }
 
-        $this->validate($rules, $messages);
-
-        // Iterasi atas daftar dari database, bukan atas kunci $this->nilai, supaya peserta
-        // atau komponen dari blok lain tidak bisa disusupkan dari klien.
-        DB::transaction(function () use ($anggota, $komponen) {
+    /**
+     * Satu-satunya jalur tulis nilai, dipakai `simpan()` dan `importNilai()`. Disatukan supaya
+     * perhitungan total dan `rekap_nilai_pertemuan_blok` tidak punya dua implementasi yang
+     * bisa melenceng.
+     *
+     * Iterasi atas daftar dari database, bukan atas kunci `$this->nilai`, supaya peserta atau
+     * komponen dari blok lain tidak bisa disusupkan dari klien.
+     *
+     * `$hanyaPeserta` membatasi penulisan ke sebagian peserta dan dipakai import, supaya
+     * peserta yang barisnya tidak ada di berkas tidak tersentuh. Null berarti seluruh anggota,
+     * seperti simpan manual yang selalu mengirim seluruh matriks.
+     *
+     * @param  array<int, int>|null  $hanyaPeserta  daftar peserta_blok_id
+     */
+    private function tulisNilai(Collection $anggota, Collection $komponen, ?array $hanyaPeserta = null): void
+    {
+        DB::transaction(function () use ($anggota, $komponen, $hanyaPeserta) {
             $nilaiMaks = (float) $komponen->sum(fn ($item) => (float) $item->nilai_maks);
 
             foreach ($anggota as $peserta) {
+                $pesertaId = (int) $peserta->id_peserta_blok;
+
+                if ($hanyaPeserta !== null && ! in_array($pesertaId, $hanyaPeserta, true)) {
+                    continue;
+                }
+
                 $total = 0;
 
                 foreach ($komponen as $item) {
                     $kunci = [
                         'pertemuan_blok_id' => $this->pertemuan_blok_id,
-                        'peserta_blok_id' => $peserta->id_peserta_blok,
+                        'peserta_blok_id' => $pesertaId,
                         'komponen_penilaian_blok_id' => $item->id,
                     ];
 
-                    $isian = trim((string) ($this->nilai[$peserta->id_peserta_blok][$item->id] ?? ''));
+                    $isian = trim((string) ($this->nilai[$pesertaId][$item->id] ?? ''));
 
                     if ($isian === '') {
                         NilaiPertemuanBlok::where($kunci)->delete();
@@ -201,20 +263,94 @@ new class extends Component
 
                 RekapNilaiPertemuanBlok::updateOrCreate([
                     'pertemuan_blok_id' => $this->pertemuan_blok_id,
-                    'peserta_blok_id' => $peserta->id_peserta_blok,
+                    'peserta_blok_id' => $pesertaId,
                 ], [
                     'total' => $total,
                     'nilai_akhir' => RekapNilaiPertemuanBlok::hitungNilaiAkhir($total, $nilaiMaks),
                 ]);
             }
         });
+    }
 
+    /**
+     * Template berisi seluruh anggota kelompok beserta nilai yang sudah tersimpan, jadi berkas
+     * yang sama dipakai untuk pengisian pertama maupun koreksi.
+     */
+    public function unduhTemplate()
+    {
+        abort_unless($this->bolehIsi(), 403);
+
+        $anggota = $this->anggota();
+        $komponen = $this->komponen();
+
+        if (! $this->siapDinilai($anggota, $komponen)) {
+            return null;
+        }
+
+        $pertemuan = $this->pertemuan();
+
+        $nama = Str::limit(Str::slug(implode('-', array_filter([
+            'template-nilai',
+            $pertemuan->kelompok_blok?->kode,
+            $pertemuan->materi_rinci_blok?->judul ?: $pertemuan->topik,
+        ]))), 80, '');
+
+        return Excel::download(
+            new NilaiPertemuanTemplateExport($anggota, $komponen, $this->nilai),
+            ($nama !== '' ? $nama : 'template-nilai-pertemuan').'.xlsx',
+        );
+    }
+
+    /**
+     * Import hanya menimpa peserta yang barisnya ada di berkas; nilai peserta lain dibiarkan,
+     * supaya berkas yang dipangkas tidak menghapus pekerjaan yang sudah ada. Sebaliknya sel
+     * yang dikosongkan tetap menghapus nilai komponen itu, sama seperti isian di layar.
+     */
+    public function importNilai(): void
+    {
+        abort_unless($this->bolehIsi(), 403);
+
+        $this->validate([
+            'importFile' => ['required', 'file', 'mimes:xlsx,xls,csv', 'max:5120'],
+        ], [
+            'importFile.required' => 'File import wajib dipilih.',
+            'importFile.file' => 'Berkas import tidak valid.',
+            'importFile.mimes' => 'File import harus berformat xlsx, xls, atau csv.',
+            'importFile.max' => 'Ukuran file import maksimal 5 MB.',
+        ]);
+
+        $anggota = $this->anggota();
+        $komponen = $this->komponen();
+
+        if (! $this->siapDinilai($anggota, $komponen)) {
+            return;
+        }
+
+        $import = new NilaiPertemuanImport($anggota, $komponen);
+
+        Excel::import($import, $this->importFile);
+
+        $terbaca = $import->nilai();
+
+        // Isian hasil pembacaan sudah divalidasi terhadap batas di `komponen_penilaian_blok`
+        // oleh kelas import, jadi tidak divalidasi ulang lewat `aturanValidasi()`: aturan itu
+        // mencakup seluruh matriks, sehingga sel peserta lain yang belum terisi ikut diperiksa.
+        foreach ($terbaca as $pesertaId => $perKomponen) {
+            foreach ($perKomponen as $komponenId => $isian) {
+                $this->nilai[$pesertaId][$komponenId] = $isian;
+            }
+        }
+
+        $this->tulisNilai($anggota, $komponen, array_keys($terbaca));
+
+        $this->reset('importFile');
         $this->muatNilai();
 
+        $this->dispatch('import-nilai-berhasil', modalId: 'modal-import-nilai-'.$this->pertemuan_blok_id);
         $this->dispatch('nilai-pertemuan-tersimpan');
         $this->dispatch('notify', message: [
             'status' => 'success',
-            'message' => 'Nilai berhasil disimpan.',
+            'message' => 'Nilai '.count($terbaca).' mahasiswa berhasil diimport.',
         ]);
     }
 
@@ -322,7 +458,117 @@ new class extends Component
 };
 ?>
 
-<div>
+<div class="nilai-pertemuan">
+    <style>
+        .nilai-pertemuan-matrix table {
+            table-layout: fixed;
+        }
+
+        .nilai-pertemuan-matrix .nilai-no {
+            width: 2.5rem;
+        }
+
+        .nilai-pertemuan-matrix .nilai-mahasiswa {
+            width: 11.25rem;
+        }
+
+        .nilai-pertemuan-matrix .nilai-total {
+            width: 7rem;
+        }
+
+        .nilai-pertemuan-matrix .nilai-komponen,
+        .nilai-pertemuan-matrix .nilai-komponen-cell {
+            overflow-wrap: anywhere;
+        }
+
+        .nilai-pertemuan-matrix thead .nilai-komponen {
+            white-space: normal;
+            line-height: 1.35;
+        }
+
+        .nilai-pertemuan-matrix .form-control {
+            min-width: 0;
+        }
+
+        .nilai-pertemuan-label {
+            display: none;
+        }
+
+        @media (max-width: 1199.98px) {
+            .nilai-pertemuan-matrix {
+                overflow: visible;
+            }
+
+            .nilai-pertemuan-matrix table,
+            .nilai-pertemuan-matrix tbody {
+                display: block;
+            }
+
+            .nilai-pertemuan-matrix thead {
+                display: none;
+            }
+
+            .nilai-pertemuan-matrix tbody {
+                display: grid;
+                gap: .75rem;
+            }
+
+            .nilai-pertemuan-matrix tbody tr {
+                display: grid;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap: .75rem;
+                padding: 1rem;
+                border: 1px solid var(--line, #dde7e2);
+                border-radius: .5rem;
+                background: var(--surface, #fff);
+            }
+
+            .nilai-pertemuan-matrix tbody td {
+                display: block;
+                width: auto !important;
+                padding: 0;
+                border: 0;
+            }
+
+            .nilai-pertemuan-matrix tbody .nilai-no {
+                display: none;
+            }
+
+            .nilai-pertemuan-matrix tbody .nilai-mahasiswa {
+                grid-column: 1 / -1;
+                padding-bottom: .75rem;
+                border-bottom: 1px solid var(--line, #dde7e2);
+            }
+
+            .nilai-pertemuan-matrix tbody .nilai-total {
+                grid-column: 1 / -1;
+                padding-top: .75rem;
+                border-top: 1px solid var(--line, #dde7e2);
+            }
+
+            .nilai-pertemuan-label {
+                display: block;
+                margin-bottom: .35rem;
+                color: var(--muted, #6c757d);
+                font-size: .75rem;
+                font-weight: 600;
+            }
+        }
+
+        @media (max-width: 575.98px) {
+            .nilai-pertemuan-matrix tbody tr {
+                grid-template-columns: minmax(0, 1fr);
+                padding: .875rem;
+            }
+
+            .nilai-pertemuan .nilai-pertemuan-action,
+            .nilai-pertemuan .nilai-pertemuan-submit,
+            .nilai-pertemuan .nilai-pertemuan-submit .btn {
+                width: 100%;
+            }
+        }
+    </style>
+
     <x-full-page-loading message="Memproses operasional blok..." />
     @if (! $perluPenilaian)
         <div class="alert alert-warning py-2 alert-dismissible fade show" role="alert">
@@ -362,22 +608,31 @@ new class extends Component
                 <span class="badge bg-light text-dark border">{{ $komponen->count() }} komponen</span>
                 <span class="badge bg-info-subtle text-info">Nilai maksimum {{ $rekap['nilai_maks_total'] }}</span>
             </div>
+
+            {{-- Template dan import ikut aturan yang sama dengan pengisian manual, yaitu
+                 `bolehIsi`, sehingga dosen pengampu dan pengelola mendapat perlakuan sama. --}}
+            @if ($bolehIsi)
+                <button type="button" class="btn btn-primary btn-sm text-nowrap nilai-pertemuan-action"
+                    x-on:click="$dispatch('buka-import-nilai', { modalId: 'modal-import-nilai-{{ $pertemuan_blok_id }}' })">
+                    <i class="ri-upload-2-line"></i> Import
+                </button>
+            @endif
         </div>
 
         <form wire:submit="simpan">
-            <div class="table-responsive">
+            <div class="table-responsive nilai-pertemuan-matrix">
                 <table class="table table-sm align-middle mb-0">
                     <thead class="table-light">
                         <tr>
-                            <th style="width: 40px;">#</th>
-                            <th style="min-width: 180px;">Mahasiswa</th>
+                            <th class="nilai-no">#</th>
+                            <th class="nilai-mahasiswa text-center">Mahasiswa</th>
                             @foreach ($komponen as $item)
-                                <th style="min-width: 120px;">
+                                <th class="nilai-komponen text-center">
                                     <div>{{ $item->komponen_penilaian?->nama ?: $item->komponen_penilaian?->kode }}</div>
                                     <div class="text-muted fw-normal small">{{ $item->nilai_min }} - {{ $item->nilai_maks }}</div>
                                 </th>
                             @endforeach
-                            <th style="width: 100px;">Total</th>
+                            <th class="nilai-total text-center">Total</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -386,16 +641,23 @@ new class extends Component
                             @php($total = $this->totalPeserta($pesertaId))
                             @php($nilaiAkhir = $this->nilaiAkhirPeserta($pesertaId))
                             <tr wire:key="nilai-{{ $pesertaId }}">
-                                <td class="text-muted">{{ $index + 1 }}</td>
-                                <td>
+                                <td class="text-muted nilai-no">{{ $index + 1 }}</td>
+                                <td class="nilai-mahasiswa">
                                     <div class="small fw-semibold">{{ $peserta->mahasiswa?->nama }}</div>
                                     <div class="text-muted small">{{ $peserta->mahasiswa?->nim }}</div>
                                 </td>
                                 @foreach ($komponen as $item)
-                                    <td>
+                                    @php($namaKomponen = $item->komponen_penilaian?->nama ?: $item->komponen_penilaian?->kode)
+                                    <td class="nilai-komponen-cell">
+                                        <label class="nilai-pertemuan-label"
+                                            for="nilai-{{ $pertemuan_blok_id }}-{{ $pesertaId }}-{{ $item->id }}">
+                                            {{ $namaKomponen }} ({{ $item->nilai_min }}–{{ $item->nilai_maks }})
+                                        </label>
                                         @if ($bolehIsi)
-                                            <input type="number" step="0.01"
+                                            <input id="nilai-{{ $pertemuan_blok_id }}-{{ $pesertaId }}-{{ $item->id }}"
+                                                type="number" step="0.01"
                                                 min="{{ $item->nilai_min }}" max="{{ $item->nilai_maks }}"
+                                                aria-label="Nilai {{ $namaKomponen }} untuk {{ $peserta->mahasiswa?->nama }}"
                                                 class="form-control form-control-sm"
                                                 placeholder="-"
                                                 wire:model.blur="nilai.{{ $pesertaId }}.{{ $item->id }}">
@@ -410,7 +672,8 @@ new class extends Component
                                         @endif
                                     </td>
                                 @endforeach
-                                <td>
+                                <td class="nilai-total">
+                                    <span class="nilai-pertemuan-label">Total</span>
                                     @if ($total === null)
                                         <span class="text-muted small">-</span>
                                     @else
@@ -433,15 +696,70 @@ new class extends Component
             <div class="text-muted small mt-2">
                 Kosongkan isian untuk membatalkan penilaian komponen tersebut. Nilai boleh diperbaiki kapan saja,
                 termasuk setelah pertemuan divalidasi.
+                @if ($bolehIsi)
+                    <br>
+                    Lewat <span class="fw-semibold">Template Import</span>, berkas yang diunduh sudah memuat seluruh mahasiswa
+                    beserta nilai yang tersimpan, jadi bisa dipakai untuk mengisi maupun mengoreksi. Saat diimport, sel
+                    yang dikosongkan <span class="fw-semibold">menghapus</span> nilai komponen itu, sedangkan baris NIM
+                    yang dihapus dari berkas tidak tersentuh. Bila ada satu baris yang ditolak, seluruh berkas dibatalkan.
+                @endif
             </div>
 
             @if ($bolehIsi)
-                <div class="mt-3">
+                <div class="mt-3 nilai-pertemuan-submit">
                     <button type="submit" class="btn btn-primary btn-sm" wire:loading.attr="disabled" wire:target="simpan">
                         <i class="ri-save-line"></i> SIMPAN NILAI
                     </button>
                 </div>
             @endif
         </form>
+
+        @if ($bolehIsi)
+            @teleport('body')
+                {{-- ponytail: Bootstrap tidak mendukung modal bertumpuk. Simpan body style modal induk;
+                     ganti modal import dengan panel non-modal bila kelak perlu focus trap lintas dua dialog. --}}
+                <div wire:ignore.self class="modal fade" id="modal-import-nilai-{{ $pertemuan_blok_id }}" tabindex="-1"
+                    aria-labelledby="modal-import-nilai-{{ $pertemuan_blok_id }}-label" aria-hidden="true"
+                    style="z-index: 1060;"
+                    x-data="{ bodyStyle: null }"
+                    x-on:buka-import-nilai.window="if ($event.detail.modalId === $el.id) { bodyStyle = document.body.getAttribute('style'); bootstrap.Modal.getOrCreateInstance($el, { backdrop: false }).show(); }"
+                    x-init="$el.addEventListener('hidden.bs.modal', () => { const parent = document.getElementById('pelaksanaanModal'); if (parent?.classList.contains('show')) { bodyStyle === null ? document.body.removeAttribute('style') : document.body.setAttribute('style', bodyStyle); document.body.classList.add('modal-open'); parent.focus(); bodyStyle = null; } })"
+                    x-on:import-nilai-berhasil.window="if ($event.detail.modalId === $el.id) bootstrap.Modal.getInstance($el)?.hide()">
+                    <div class="modal-dialog modal-dialog-centered">
+                        <form wire:submit="importNilai" class="modal-content" x-data="{ uploadError: '' }">
+                            <div class="modal-header">
+                                <h5 class="modal-title" id="modal-import-nilai-{{ $pertemuan_blok_id }}-label">Template Import</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+                            </div>
+                            <div class="modal-body">
+                                <button type="button" wire:click="unduhTemplate"
+                                    wire:loading.attr="disabled" wire:target="unduhTemplate,importNilai"
+                                    class="btn btn-secondary btn-sm mb-3 d-block">
+                                    <i class="ri-file-excel-2-line"></i> Template Import
+                                </button>
+                                <label for="import-file-nilai-{{ $pertemuan_blok_id }}" class="form-label">File Import Nilai Pertemuan</label>
+                                <input id="import-file-nilai-{{ $pertemuan_blok_id }}" type="file" class="form-control"
+                                    wire:model="importFile" wire:loading.attr="disabled" wire:target="importNilai"
+                                    x-on:livewire-upload-start="uploadError = ''"
+                                    x-on:livewire-upload-error="uploadError = 'File gagal diunggah. Coba lagi atau hubungi pengelola sistem.'"
+                                    accept=".xlsx,.xls,.csv">
+                                <div x-show="uploadError" x-text="uploadError" class="small text-danger mt-1"
+                                    role="alert" style="display: none;"></div>
+                                @error('importFile') <div class="small text-danger mt-1">{{ $message }}</div> @enderror
+                                @error('import_nilai') <div class="small text-danger mt-1">{{ $message }}</div> @enderror
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Batal</button>
+                                <button type="submit" class="btn btn-primary"
+                                    wire:loading.attr="disabled" wire:target="unduhTemplate,importNilai">
+                                    <span wire:loading.remove wire:target="importNilai"><i class="ri-upload-2-line"></i> Import</span>
+                                    <span wire:loading wire:target="importNilai">Memproses...</span>
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            @endteleport
+        @endif
     @endif
 </div>

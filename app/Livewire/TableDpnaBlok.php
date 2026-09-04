@@ -25,6 +25,13 @@ final class TableDpnaBlok extends Component
 
     protected string $paginationTheme = 'bootstrap';
 
+    public function mount(): void
+    {
+        if (! request()->query->has('semester')) {
+            $this->semesterId = $this->semesterAktifId();
+        }
+    }
+
     public function updated(string $property): void
     {
         if (in_array($property, ['search', 'prodiId', 'semesterId'], true)) {
@@ -34,8 +41,14 @@ final class TableDpnaBlok extends Component
 
     public function resetFilters(): void
     {
-        $this->reset('search', 'prodiId', 'semesterId');
+        $this->reset('search', 'prodiId');
+        $this->semesterId = $this->semesterAktifId();
         $this->resetPage();
+    }
+
+    private function semesterAktifId(): string
+    {
+        return (string) (Semester::where('is_aktif', true)->value('id_semester') ?? '');
     }
 
     public function render(): View

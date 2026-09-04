@@ -25,6 +25,13 @@ final class TableBlokOperasional extends Component
 
     protected string $paginationTheme = 'bootstrap';
 
+    public function mount(): void
+    {
+        if (! request()->query->has('semester')) {
+            $this->semesterId = $this->semesterAktifId();
+        }
+    }
+
     public function updatedSearch(): void
     {
         $this->resetPage();
@@ -42,8 +49,14 @@ final class TableBlokOperasional extends Component
 
     public function resetFilters(): void
     {
-        $this->reset('search', 'prodiId', 'semesterId');
+        $this->reset('search', 'prodiId');
+        $this->semesterId = $this->semesterAktifId();
         $this->resetPage();
+    }
+
+    private function semesterAktifId(): string
+    {
+        return (string) (Semester::where('is_aktif', true)->value('id_semester') ?? '');
     }
 
     public function placeholder(): string
@@ -70,6 +83,7 @@ final class TableBlokOperasional extends Component
                 'mata_kuliah:id,blok_id,kode',
                 'koordinator:id_dosen,nama',
                 'asisten_koordinator:id_dosen,nama',
+                'pengelola_blok.dosen:id_dosen,nama',
             ])
             ->withCount(['peserta_blok', 'kelompok_blok', 'pertemuan_blok'])
             ->when($search !== '', fn ($query) => $query->where(

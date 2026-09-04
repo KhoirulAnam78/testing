@@ -3,9 +3,11 @@
 use App\Livewire\Actions\Logout;
 use App\Models\User;
 use Illuminate\Support\Facades\Auth;
+use Livewire\Attributes\On;
 use Livewire\Component;
 
-new class extends Component {
+new class extends Component
+{
     public function logout(Logout $logout): void
     {
         $logout();
@@ -35,20 +37,15 @@ new class extends Component {
 
         $this->redirectRoute('users.index', navigate: false);
     }
+
+    #[On('profile-updated')]
+    public function refreshProfile(): void
+    {
+        // Render ulang header setelah profil disimpan.
+    }
 }; ?>
 
 <header id="page-topbar">
-    @if (session()->has('login_as_original_user_id'))
-        <div class="alert alert-warning rounded-0 border-0 mb-0 py-2 text-center alert-dismissible fade show" role="alert">
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Tutup"></button>
-            <i class="ri-user-shared-line me-1"></i>
-            Login As <strong>{{ auth()->user()->name }}</strong>
-            <button type="button" class="btn btn-dark btn-sm ms-2" wire:click="stopLoginAs">
-                Kembali ke akun asli
-            </button>
-        </div>
-    @endif
-
     <div class="layout-width">
         <div class="navbar-header">
             <div class="d-flex align-items-center">
@@ -115,9 +112,14 @@ new class extends Component {
                         aria-haspopup="true" aria-expanded="false">
                         <span class="d-flex align-items-center">
                             <span class="avatar-sm">
-                                <span class="avatar-title rounded-circle bg-primary-subtle text-primary">
-                                    <i class="ri-user-3-line fs-18"></i>
-                                </span>
+                                @if (auth()->user()->foto_profil)
+                                    <img src="{{ asset('storage/'.auth()->user()->foto_profil) }}"
+                                        class="rounded-circle w-100 h-100 object-fit-cover" alt="Foto profil {{ auth()->user()->name }}">
+                                @else
+                                    <span class="avatar-title rounded-circle bg-primary-subtle text-primary">
+                                        <i class="ri-user-3-line fs-18"></i>
+                                    </span>
+                                @endif
                             </span>
                             <span class="text-start ms-xl-2">
                                 <span class="d-none d-xl-inline-block ms-1 fw-semibold user-name-text">
@@ -134,6 +136,10 @@ new class extends Component {
                         <a class="dropdown-item" href="{{ route('dashboard') }}" wire:navigate>
                             <i class="ri-dashboard-line text-muted fs-16 align-middle me-1"></i>
                             <span class="align-middle">Dashboard</span>
+                        </a>
+                        <a class="dropdown-item" href="{{ route('profile') }}" wire:navigate>
+                            <i class="ri-user-settings-line text-muted fs-16 align-middle me-1"></i>
+                            <span class="align-middle">Profil & Akun</span>
                         </a>
                         <div class="dropdown-divider"></div>
                         @if (session()->has('login_as_original_user_id'))

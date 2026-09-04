@@ -11,6 +11,7 @@ class KomponenPenilaianLifecycleTest extends TestCase
         $jenisKegiatanSource = file_get_contents(__DIR__.'/../../resources/views/pages/jenis-kegiatan/add_edit.blade.php');
         $blokSource = file_get_contents(__DIR__.'/../../resources/views/pages/blok/add_edit.blade.php');
         $tableJenisKegiatanSource = file_get_contents(__DIR__.'/../../app/Livewire/TableJenisKegiatan.php');
+        $modelJenisKegiatanSource = file_get_contents(__DIR__.'/../../app/Models/JenisKegiatan.php');
         $modelSource = file_get_contents(__DIR__.'/../../app/Models/KomponenPenilaian.php');
         $routeSource = file_get_contents(__DIR__.'/../../routes/web.php');
         $menuMigrationSource = file_get_contents(__DIR__.'/../../database/migrations/2026_08_20_000002_remove_komponen_penilaian_menu.php');
@@ -20,24 +21,15 @@ class KomponenPenilaianLifecycleTest extends TestCase
         $this->assertStringContainsString("'jenis_kegiatan_id' => \$jenis->id", $jenisKegiatanSource);
         $this->assertStringContainsString('new KomponenPenilaian([\'kode\' => $kode])', $jenisKegiatanSource);
         $this->assertStringContainsString("'komponen_penilaian_blok as pernah_digunakan'", $jenisKegiatanSource);
-        $this->assertStringContainsString("->withTrashed()->exists()", $jenisKegiatanSource);
+        $this->assertStringContainsString('->withTrashed()->exists()', $jenisKegiatanSource);
         $this->assertStringContainsString(
-            "Komponen sudah digunakan oleh blok. Ubah status menjadi nonaktif.",
+            'Komponen sudah digunakan oleh blok. Ubah status menjadi nonaktif.',
             $jenisKegiatanSource
         );
         $this->assertStringContainsString("->update(['status' => 'nonaktif']);", $jenisKegiatanSource);
-        $this->assertStringContainsString("title=\"Komponen sudah digunakan oleh blok\"", $jenisKegiatanSource);
-        $this->assertStringContainsString('public function updatedPakaiCbt(bool $pakaiCbt): void', $jenisKegiatanSource);
-        $this->assertStringContainsString("'nama' => 'Nilai'", $jenisKegiatanSource);
-        $this->assertStringContainsString("'nilai_min' => 1", $jenisKegiatanSource);
-        $this->assertStringContainsString("'nilai_maks' => 100", $jenisKegiatanSource);
-        $this->assertStringContainsString('$this->updatedPakaiCbt($this->pakai_cbt);', $jenisKegiatanSource);
-        $this->assertStringContainsString(
-            'Komponen penilaian Nilai dengan rentang 1–100 otomatis ditambahkan untuk CBT.',
-            $jenisKegiatanSource
-        );
-        $this->assertStringContainsString("wire:model.live=\"pakai_cbt\"", $jenisKegiatanSource);
-        $this->assertStringContainsString('@if (! $pakai_cbt)', $jenisKegiatanSource);
+        $this->assertStringContainsString('title="Komponen sudah digunakan oleh blok"', $jenisKegiatanSource);
+        $this->assertStringNotContainsString('pakai_cbt', $jenisKegiatanSource);
+        $this->assertStringNotContainsString('pakai_cbt', $modelJenisKegiatanSource);
         $this->assertStringNotContainsString('KomponenPenilaianKegiatan', $jenisKegiatanSource);
         $this->assertStringContainsString("->where('jenis_kegiatan_id', \$jenisId)", $blokSource);
         $this->assertStringContainsString(
@@ -58,7 +50,7 @@ class KomponenPenilaianLifecycleTest extends TestCase
             "'komponen_penilaian as komponen_penilaian_aktif_count' => fn (\$query) => \$query->aktif()",
             $tableJenisKegiatanSource
         );
-        $this->assertStringContainsString("Column::make('CBT', 'pakai_cbt_label', 'pakai_cbt')->sortable()", $tableJenisKegiatanSource);
+        $this->assertStringNotContainsString('pakai_cbt', $tableJenisKegiatanSource);
         $this->assertStringContainsString("Column::make('Komponen Penilaian', 'komponen_penilaian')", $tableJenisKegiatanSource);
         $this->assertStringContainsString('Ada (\'.$row->komponen_penilaian_aktif_count.\' komponen)', $tableJenisKegiatanSource);
         $this->assertStringContainsString('public function jenis_kegiatan(): BelongsTo', $modelSource);

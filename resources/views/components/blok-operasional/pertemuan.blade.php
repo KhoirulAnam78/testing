@@ -44,7 +44,7 @@ new class extends Component
     {
         $this->blok_id = (int) $blok_id;
 
-        $blok = Blok::select(['id', 'koordinator_id', 'asisten_koordinator_id'])->findOrFail($this->blok_id);
+        $blok = Blok::select('id')->findOrFail($this->blok_id);
 
         abort_unless($blok->dapatDikelolaOleh(auth()->user()), 403);
 
@@ -68,9 +68,9 @@ new class extends Component
         return AturanKegiatanBlok::query()
             ->where('blok_id', $this->blok_id)
             ->with('jenis_kegiatan:id,kode,nama')
-            ->withCount(['kelompok_blok', 'pertemuan_blok'])
+            ->withCount(['kelompok_blok', 'pertemuan_blok', 'materi_rinci_blok'])
             ->orderBy('urutan')
-            ->get(['id', 'blok_id', 'jenis_kegiatan_id', 'jumlah_pertemuan', 'durasi_menit', 'urutan']);
+            ->get(['id', 'blok_id', 'jenis_kegiatan_id', 'durasi_menit', 'urutan']);
     }
 
     public function resetMapping(): void
@@ -643,7 +643,7 @@ new class extends Component
                 <div class="d-flex flex-wrap gap-2">
                     @foreach ($aturanList as $aturan)
                         <button type="button"
-                            class="btn btn-sm {{ (int) $aturan_kegiatan_blok_id === (int) $aturan->id ? 'btn-primary' : 'btn-outline-primary' }}"
+                            class="btn btn-sm {{ (int) $aturan_kegiatan_blok_id === (int) $aturan->id ? 'btn-primary' : 'btn-light' }}"
                             wire:click="pilihKegiatan('{{ $aturan->id }}')">
                             {{ $aturan->jenis_kegiatan?->nama }}
                             <span class="badge bg-light text-dark border ms-1">{{ $aturan->kelompok_blok_count }} kelompok</span>
@@ -689,7 +689,7 @@ new class extends Component
                         @error('copy_tujuan_id') <div class="text-sm text-danger">{{ $message }}</div> @enderror
                     </div>
                     <div class="col-md-2">
-                        <button type="button" class="btn btn-outline-primary w-100" wire:click="salinKelompok"
+                        <button type="button" class="btn btn-primary w-100" wire:click="salinKelompok"
                             wire:confirm="Semua pengaturan materi yang sama pada kelompok tujuan akan ditimpa. Lanjutkan?">
                             <i class="ri-file-copy-line"></i> Salin Semua
                         </button>
@@ -781,7 +781,7 @@ new class extends Component
                                                         wire:click="kelolaMateri('{{ $rinci->id_materi_rinci_blok }}', '{{ $kelompok->id_kelompok_blok }}')">
                                                         <i class="ri-user-settings-line"></i> Pengampu & Jadwal
                                                     </button>
-                                                    <button type="button" class="btn btn-outline-primary btn-sm"
+                                                    <button type="button" class="btn btn-primary btn-sm"
                                                         wire:click="kelolaModul('{{ $rinci->id_materi_rinci_blok }}', '{{ $kelompok->id_kelompok_blok }}')">
                                                         <i class="ri-links-line"></i> Modul & Video
                                                         @if ($jumlahLampiran) <span class="badge bg-primary">{{ $jumlahLampiran }}</span> @endif
@@ -891,7 +891,7 @@ new class extends Component
                                         @foreach ($dosenOptions as $dosen)
                                             @php($aktif = in_array((string) $dosen->id_dosen, $dosenTerpilih, true))
                                             <button type="button"
-                                                class="btn btn-sm {{ $aktif ? 'btn-success' : 'btn-outline-secondary' }}"
+                                                class="btn btn-sm {{ $aktif ? 'btn-success' : 'btn-light' }}"
                                                 aria-pressed="{{ $aktif ? 'true' : 'false' }}"
                                                 wire:click="toggleDosen('{{ $id }}', '{{ $dosen->id_dosen }}')">
                                                 @if ($aktif)

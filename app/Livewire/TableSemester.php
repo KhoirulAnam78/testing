@@ -57,7 +57,7 @@ final class TableSemester extends PowerGridComponent
             ->add('kode')
             ->add('tanggal_mulai', fn ($row) => $row->tanggal_mulai?->format('d/m/Y') ?: '-')
             ->add('tanggal_selesai', fn ($row) => $row->tanggal_selesai?->format('d/m/Y') ?: '-')
-            ->add('is_aktif', fn ($row) => $row->is_aktif
+            ->add('status_label', fn ($row) => $row->is_aktif
                 ? '<span class="badge bg-success">Aktif</span>'
                 : '<span class="badge bg-secondary">Tidak Aktif</span>')
             ->add('created_at')
@@ -83,7 +83,7 @@ final class TableSemester extends PowerGridComponent
             Column::make('Kode', 'kode')->searchable()->sortable(),
             Column::make('Mulai', 'tanggal_mulai'),
             Column::make('Selesai', 'tanggal_selesai'),
-            Column::make('Status', 'is_aktif')->sortable(),
+            Column::make('Status', 'status_label', 'is_aktif')->sortable(),
             Column::action('Aksi'),
         ];
     }

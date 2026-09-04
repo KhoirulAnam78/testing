@@ -119,13 +119,11 @@ new #[Layout('layouts.app')] class extends Component
                     'email' => $payload['email'],
                 ]);
             } else {
-                $password = $payload['nidn'] ?: $payload['nip'] ?: 'password';
-
                 $user = User::create([
                     'name' => $payload['nama'],
                     'username' => $username,
                     'email' => $payload['email'],
-                    'password' => Hash::make($password),
+                    'password' => Hash::make($username),
                 ]);
 
                 $payload['user_id'] = $user->id;

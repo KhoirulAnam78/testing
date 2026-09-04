@@ -6,6 +6,7 @@ use App\Models\JenisKegiatan;
 use App\Models\Mahasiswa;
 use App\Models\MataKuliah;
 use App\Models\PertemuanBlok;
+use App\Models\PresensiPertemuanBlok;
 use App\Models\Prodi;
 use App\Models\Semester;
 use Illuminate\Support\Collection;
@@ -21,6 +22,8 @@ new #[Layout('layouts.app')] class extends Component {
     public Collection $agenda;
     public int $agendaHariIni = 0;
     public int $perluTindakLanjut = 0;
+    public int $pertemuanSelesai = 0;
+    public int $pertemuanHadir = 0;
 
     public function mount(): void
     {
@@ -55,19 +58,29 @@ new #[Layout('layouts.app')] class extends Component {
             return;
         }
 
+        $pesertaAktif = fn ($query) => $query
+            ->where('mahasiswa_id', $this->profil->id_mahasiswa)
+            ->whereIn('status', ['aktif', 'mengulang']);
+
         $query = PertemuanBlok::query()
-            ->whereHas('kelompok_blok.anggota_kelompok_blok.peserta_blok', fn ($query) => $query
-                ->where('mahasiswa_id', $this->profil->id_mahasiswa)
-                ->whereIn('status', ['aktif', 'mengulang']))
+            ->whereHas('kelompok_blok.anggota_kelompok_blok.peserta_blok', $pesertaAktif)
             ->whereNotNull('tanggal')
-            ->whereDate('tanggal', '>=', today())
+            ->whereDate('tanggal', '<', today())
             ->where('status', '!=', 'batal');
 
-        $this->agendaHariIni = (clone $query)->whereDate('tanggal', today())->count();
-        $this->agenda = $this->agenda($query, true);
+        $pesertaBlokIds = $this->profil->peserta_blok()->whereIn('status', ['aktif', 'mengulang'])->pluck('id_peserta_blok');
+
+        $this->pertemuanSelesai = (clone $query)->count();
+        $this->pertemuanHadir = PresensiPertemuanBlok::query()
+            ->whereIn('peserta_blok_id', $pesertaBlokIds)
+            ->whereIn('status', PresensiPertemuanBlok::STATUS_HADIR)
+            ->whereHas('pertemuan_blok', fn ($q) => $q->whereNotNull('tanggal')->whereDate('tanggal', '<', today())->where('status', '!=', 'batal'))
+            ->count();
+        $this->agenda = $this->agendaMahasiswa($query, $pesertaBlokIds);
         $this->stats = [
             ['label' => 'Blok Diikuti', 'value' => $this->profil->peserta_blok()->whereIn('status', ['aktif', 'mengulang'])->count()],
-            ['label' => 'Agenda Hari Ini', 'value' => $this->agendaHariIni],
+            ['label' => 'Pertemuan Selesai', 'value' => $this->pertemuanSelesai],
+            ['label' => 'Kehadiran', 'value' => $this->pertemuanSelesai > 0 ? round(($this->pertemuanHadir / $this->pertemuanSelesai) * 100).'%' : '0%'],
         ];
     }
 
@@ -116,6 +129,24 @@ new #[Layout('layouts.app')] class extends Component {
         return $query->with($with)->orderBy('tanggal')->orderBy('jam_mulai')->limit(5)->get();
     }
 
+    private function agendaMahasiswa($query, $pesertaBlokIds): Collection
+    {
+        $pertemuan = $query->with([
+            'blok:id,kode,nama',
+            'kelompok_blok:id_kelompok_blok,kode,nama',
+            'materi_rinci_blok:id_materi_rinci_blok,judul',
+            'aturan_kegiatan_blok.jenis_kegiatan:id,nama',
+            'dosen_pertemuan_blok.dosen:id_dosen,nama',
+            'presensi_pertemuan_blok' => fn ($q) => $q->whereIn('peserta_blok_id', $pesertaBlokIds),
+        ])
+            ->orderByDesc('tanggal')
+            ->orderByDesc('jam_mulai')
+            ->limit(10)
+            ->get();
+
+        return $pertemuan;
+    }
+
     private function muatDashboardPengelola(): void
     {
         $this->semesterAktif = Semester::where('is_aktif', true)->first();
@@ -157,7 +188,7 @@ new #[Layout('layouts.app')] class extends Component {
             <div class="card-body p-4">
                 <small class="text-uppercase">Portal {{ ucfirst($jenisDashboard) }}</small>
                 <h2 class="text-white mt-2 mb-1">Halo, {{ $profil?->nama ?? auth()->user()->name }}</h2>
-                <p class="text-muted mb-0">{{ $jenisDashboard === 'mahasiswa' ? 'Jadwal, materi, dan kebutuhan belajar Anda dalam satu tempat.' : 'Agenda mengajar dan tindak lanjut pertemuan Anda.' }}</p>
+                <p class="text-muted mb-0">{{ $jenisDashboard === 'mahasiswa' ? 'Materi, pengampu, tanggal pelaksanaan, dan kehadiran Anda dalam satu tempat.' : 'Agenda mengajar dan tindak lanjut pertemuan Anda.' }}</p>
             </div>
         </div>
 
@@ -192,20 +223,50 @@ new #[Layout('layouts.app')] class extends Component {
         </div>
 
         <div class="card">
-            <div class="card-header"><h5 class="card-title mb-1">Agenda Terdekat</h5><p class="text-muted mb-0">Maksimal lima pertemuan yang terkait dengan Anda.</p></div>
+            <div class="card-header">
+                @if ($jenisDashboard === 'mahasiswa')
+                    <h5 class="card-title mb-1">Daftar Pertemuan Terlaksana</h5>
+                    <p class="text-muted mb-0">Materi, pengampu, tanggal pelaksanaan, dan status kehadiran Anda.</p>
+                @else
+                    <h5 class="card-title mb-1">Agenda Terdekat</h5>
+                    <p class="text-muted mb-0">Maksimal lima pertemuan yang terkait dengan Anda.</p>
+                @endif
+            </div>
             <div class="card-body p-0">
                 @forelse ($agenda as $item)
                     <div class="d-flex gap-3 p-3 {{ ! $loop->last ? 'border-bottom' : '' }}" wire:key="agenda-{{ $item->id_pertemuan_blok }}">
                         <div class="dashboard-agenda-date"><strong>{{ $item->tanggal->format('d') }}</strong><small>{{ $item->tanggal->translatedFormat('M') }}</small></div>
-                        <div>
+                        <div class="flex-grow-1">
                             <h6 class="mb-1">{{ $item->materi_rinci_blok?->judul ?? $item->topik ?? 'Pertemuan blok' }}</h6>
                             <div class="text-muted small">{{ $item->blok?->kode }} - {{ $item->blok?->nama }} · {{ $item->kelompok_blok?->kode }}</div>
-                            <div class="small mt-1"><i class="ri-time-line"></i> {{ $item->jam_mulai ? substr($item->jam_mulai, 0, 5) : 'Waktu belum diatur' }}@if ($item->ruangan) · {{ $item->ruangan }}@endif</div>
-                            @if ($jenisDashboard === 'mahasiswa' && ($pengampu = $item->dosen_pertemuan_blok->pluck('dosen.nama')->filter()->join(', ')))<div class="text-muted small">Pengampu: {{ $pengampu }}</div>@endif
+                            @if ($jenisDashboard === 'mahasiswa')
+                                @if ($pengampu = $item->dosen_pertemuan_blok->pluck('dosen.nama')->filter()->join(', '))
+                                    <div class="text-muted small">Pengampu: {{ $pengampu }}</div>
+                                @endif
+                                @php $presensi = $item->presensi_pertemuan_blok->first(); @endphp
+                                <div class="mt-2">
+                                    @if ($presensi)
+                                        @php
+                                            $warna = match ($presensi->status) {
+                                                'hadir' => 'success',
+                                                'sakit', 'izin' => 'warning',
+                                                'alpa' => 'danger',
+                                                default => 'secondary',
+                                            };
+                                        @endphp
+                                        <span class="badge bg-{{ $warna }}-subtle text-{{ $warna }}"><i class="ri-user-check-line"></i> Kehadiran: {{ ucfirst($presensi->status) }}</span>
+                                    @else
+                                        <span class="badge bg-secondary-subtle text-secondary"><i class="ri-question-line"></i> Kehadiran belum tercatat</span>
+                                    @endif
+                                </div>
+                            @else
+                                <div class="small mt-1"><i class="ri-time-line"></i> {{ $item->jam_mulai ? substr($item->jam_mulai, 0, 5) : 'Waktu belum diatur' }}@if ($item->ruangan) · {{ $item->ruangan }}
+                                @endif</div>
+                            @endif
                         </div>
                     </div>
                 @empty
-                    <div class="text-center text-muted py-5"><i class="ri-calendar-check-line d-block fs-2 mb-2"></i>Belum ada agenda terjadwal.</div>
+                    <div class="text-center text-muted py-5"><i class="ri-calendar-check-line d-block fs-2 mb-2"></i>{{ $jenisDashboard === 'mahasiswa' ? 'Belum ada pertemuan terlaksana.' : 'Belum ada agenda terjadwal.' }}</div>
                 @endforelse
             </div>
         </div>
@@ -227,7 +288,7 @@ new #[Layout('layouts.app')] class extends Component {
             <div class="card-header"><h5 class="card-title mb-0">Blok Aktif</h5></div>
             <div class="card-body">
                 @forelse ($blokAktif as $blok)
-                    <div class="py-2 {{ ! $loop->last ? 'border-bottom' : '' }}"><strong>{{ $blok->kode }} - {{ $blok->nama }}</strong><div class="text-muted small">{{ $blok->prodi?->nama ?? 'Prodi belum diatur' }}</div></div>
+                    <div class="py-2 {{ ! $loop->last ? 'border-bottom' : '' }}"><strong>{{ $blok->nama }}</strong><div class="text-muted small">{{ $blok->prodi?->nama ?? 'Prodi belum diatur' }}</div></div>
                 @empty
                     <p class="text-muted mb-0">Belum ada blok aktif.</p>
                 @endforelse

@@ -6,111 +6,73 @@ use App\Models\Blok;
 use App\Models\Prodi;
 use App\Models\Semester;
 use Illuminate\Contracts\Encryption\DecryptException;
-use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Contracts\View\View;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Livewire\Attributes\On;
-use PowerComponents\LivewirePowerGrid\Button;
-use PowerComponents\LivewirePowerGrid\Column;
-use PowerComponents\LivewirePowerGrid\Facades\Filter;
-use PowerComponents\LivewirePowerGrid\Facades\PowerGrid;
-use PowerComponents\LivewirePowerGrid\PowerGridComponent;
-use PowerComponents\LivewirePowerGrid\PowerGridFields;
+use Livewire\Attributes\Url;
+use Livewire\Component;
+use Livewire\WithPagination;
 
-final class TableBlok extends PowerGridComponent
+final class TableBlok extends Component
 {
-    public string $tableName = 'tableBlokTable';
+    use WithPagination;
 
-    public int $rowNumber = 0;
+    #[Url(as: 'q')]
+    public string $search = '';
 
-    public bool $showFilters = true;
+    #[Url(as: 'prodi')]
+    public string $prodiId = '';
 
-    public ?string $prodiId = null;
+    #[Url(as: 'semester')]
+    public string $semesterId = '';
 
-    /** @var Collection<int, object>|null */
-    private static ?Collection $prodiOptions = null;
+    protected string $paginationTheme = 'bootstrap';
 
-    /** @var Collection<int, object>|null */
-    private static ?Collection $semesterOptions = null;
-
-    public ?string $semesterId = null;
-
-    public function setUp(): array
+    public function mount(): void
     {
-        return [
-            PowerGrid::header()->showSearchInput(),
-            PowerGrid::footer()->showPerPage(10)->showRecordCount('min'),
-        ];
+        if (! request()->query->has('semester')) {
+            $this->semesterId = $this->semesterAktifId();
+        }
     }
 
-    public function datasource(): ?Builder
+    public function updatedSearch(): void
     {
-        $this->rowNumber = 0;
-
-        return Blok::query()
-            ->with(['prodi', 'semester'])
-            ->when($this->prodiId, fn (Builder $query) => $query->where('prodi_id', $this->prodiId))
-            ->when($this->semesterId, fn (Builder $query) => $query->where('semester_id', $this->semesterId));
+        $this->resetPage();
     }
 
-    public function fields(): PowerGridFields
+    public function updatedProdiId(): void
     {
-        return PowerGrid::fields()
-            ->add('id')
-            ->add('no', function () {
-                $page = $this->paginators['page'] ?? 1;
-                $footer = $this->setUp['footer'];
-                $perPage = is_array($footer) && array_key_exists('perPage', $footer) ? $footer['perPage'] : $footer->perPage;
-
-                return ($page - 1) * $perPage + (++$this->rowNumber);
-            })
-            ->add('kode')
-            ->add('nama')
-            ->add('prodi_nama', fn ($row) => $row->prodi?->nama ?: '-')
-            ->add('semester_nama', fn ($row) => $row->semester ? ucfirst($row->semester->nama).' '.$row->semester->tahun : '-')
-            ->add('periode', fn ($row) => ($row->tanggal_mulai?->format('d/m/Y') ?: '-').' - '.($row->tanggal_selesai?->format('d/m/Y') ?: '-'));
+        $this->resetPage();
     }
 
-    public function columns(): array
+    public function updatedSemesterId(): void
     {
-        return [
-            Column::make('No', 'no'),
-            Column::make('Kode', 'kode')->searchable()->sortable(),
-            Column::make('Nama Blok', 'nama')->searchable()->sortable(),
-            Column::make('Prodi', 'prodi_nama'),
-            Column::make('Semester', 'semester_nama'),
-            Column::make('Periode', 'periode'),
-            Column::action('Aksi'),
-        ];
+        $this->resetPage();
     }
 
-    public function placeholder()
+    public function resetFilters(): void
+    {
+        $this->reset('search', 'prodiId');
+        $this->semesterId = $this->semesterAktifId();
+        $this->resetPage();
+    }
+
+    private function semesterAktifId(): string
+    {
+        return (string) (Semester::where('is_aktif', true)->value('id_semester') ?? '');
+    }
+
+    public function placeholder(): string
     {
         return <<<'HTML'
             <div class="d-flex justify-content-center align-items-center" style="height: 300px;">
                 <div class="spinner-border text-primary" role="status">
                     <span class="visually-hidden">Loading...</span>
                 </div>
-                <div class="ms-3">Memuat data tabel...</div>
+                <div class="ms-3">Memuat daftar blok...</div>
             </div>
         HTML;
-    }
-
-    public function filters(): array
-    {
-        return [
-            Filter::inputText('kode')->operators(['contains', 'contains_not'])->placeholder('Kode'),
-            Filter::inputText('nama')->operators(['contains', 'contains_not'])->placeholder('Nama'),
-            Filter::select('prodi_id', 'prodi_id')
-                ->dataSource(self::$prodiOptions ??= Prodi::orderBy('nama')->get(['id_prodi', 'nama']))
-                ->optionValue('id_prodi')
-                ->optionLabel('nama'),
-            Filter::select('semester_id', 'semester_id')
-                ->dataSource(self::$semesterOptions ??= Semester::orderByDesc('tahun')->get(['id_semester', 'kode']))
-                ->optionValue('id_semester')
-                ->optionLabel('kode'),
-        ];
     }
 
     public function confirmDeleteBlok(string $id): void
@@ -126,11 +88,11 @@ final class TableBlok extends PowerGridComponent
     }
 
     #[On('delete-blok-confirmed')]
-    public function deleteBlok($id): void
+    public function deleteBlok(string $id): void
     {
         try {
             $decrypted = Crypt::decrypt($id);
-        } catch (DecryptException $e) {
+        } catch (DecryptException) {
             abort(404);
         }
 
@@ -173,20 +135,27 @@ final class TableBlok extends PowerGridComponent
         ]);
     }
 
-    public function actions($row): array
+    public function render(): View
     {
-        return [
-            Button::add('edit-blok')
-                ->slot('<i class="ri-file-edit-line"></i> Kelola')
-                ->class('btn btn-info btn-sm mb-2')
-                ->route('blok.add_edit', ['id' => Crypt::encrypt($row->id)])
-                ->tooltip('Edit Blok')
-                ->attributes(['wire:navigate' => true]),
-            Button::add('delete-blok')
-                ->slot('<i class="ri-delete-bin-line"></i> Hapus')
-                ->class('btn btn-danger btn-sm mb-2')
-                ->tooltip('Hapus Blok')
-                ->attributes(['wire:click' => "confirmDeleteBlok('".Crypt::encrypt($row->id)."')"]),
-        ];
+        $search = trim($this->search);
+
+        $bloks = Blok::query()
+            ->with([
+                'prodi:id_prodi,nama',
+                'semester:id_semester,nama,tahun',
+            ])
+            ->withCount(['mata_kuliah', 'aturan_kegiatan_blok', 'materi_blok'])
+            ->when($search !== '', fn ($query) => $query->where('nama', 'like', "%{$search}%"))
+            ->when($this->prodiId !== '', fn ($query) => $query->where('prodi_id', $this->prodiId))
+            ->when($this->semesterId !== '', fn ($query) => $query->where('semester_id', $this->semesterId))
+            ->orderByDesc('tanggal_mulai')
+            ->orderBy('nama')
+            ->paginate(10);
+
+        return view('livewire.table-blok', [
+            'bloks' => $bloks,
+            'prodis' => Prodi::orderBy('nama')->get(['id_prodi', 'nama']),
+            'semesters' => Semester::orderByDesc('tahun')->orderBy('nama')->get(['id_semester', 'nama', 'tahun']),
+        ]);
     }
 }

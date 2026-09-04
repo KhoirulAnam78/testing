@@ -62,6 +62,15 @@ class UsernameBackfillMigrationTest extends TestCase
             'created_at' => $now,
             'updated_at' => $now,
         ]);
+        DB::table('dosen')->insert([
+            'nidn' => '0987654321',
+            'nip' => '198202022012012002',
+            'nama' => 'Dosen Baru',
+            'email' => 'dosen.baru@example.test',
+            'status' => 'aktif',
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
         DB::table('mahasiswa')->insert([
             'prodi_id' => $prodiId,
             'nim' => '20260001',
@@ -79,6 +88,9 @@ class UsernameBackfillMigrationTest extends TestCase
 
         $this->assertSame('198001012010011001', DB::table('users')->where('id', $dosenUserId)->value('username'));
         $this->assertTrue(Hash::check('password-lama', DB::table('users')->where('id', $dosenUserId)->value('password')));
+        $dosenBaruUser = DB::table('users')->where('email', 'dosen.baru@example.test')->first();
+        $this->assertSame('198202022012012002', $dosenBaruUser->username);
+        $this->assertTrue(Hash::check('198202022012012002', $dosenBaruUser->password));
         $this->assertSame('umum', DB::table('users')->where('id', $firstGeneralId)->value('username'));
         $this->assertSame('umum-'.$secondGeneralId, DB::table('users')->where('id', $secondGeneralId)->value('username'));
 
@@ -91,5 +103,46 @@ class UsernameBackfillMigrationTest extends TestCase
 
         $this->expectException(QueryException::class);
         User::factory()->create(['username' => '20260001']);
+    }
+
+    public function test_sync_default_dosen_password_uses_username_without_overwriting_custom_password(): void
+    {
+        $oldDefaultUser = User::factory()->create([
+            'username' => '198001012010011001',
+            'password' => '0123456789',
+        ]);
+        $customPasswordUser = User::factory()->create([
+            'username' => '198202022012012002',
+            'password' => 'password-kustom',
+        ]);
+
+        DB::table('dosen')->insert([
+            [
+                'user_id' => $oldDefaultUser->id,
+                'nidn' => '0123456789',
+                'nip' => '198001012010011001',
+                'nama' => 'Dosen Default Lama',
+                'email' => $oldDefaultUser->email,
+                'status' => 'aktif',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'user_id' => $customPasswordUser->id,
+                'nidn' => '0987654321',
+                'nip' => '198202022012012002',
+                'nama' => 'Dosen Password Kustom',
+                'email' => $customPasswordUser->email,
+                'status' => 'aktif',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+        ]);
+
+        $migration = require database_path('migrations/2026_09_03_000001_sync_default_dosen_password_with_username.php');
+        $migration->up();
+
+        $this->assertTrue(Hash::check('198001012010011001', $oldDefaultUser->fresh()->password));
+        $this->assertTrue(Hash::check('password-kustom', $customPasswordUser->fresh()->password));
     }
 }

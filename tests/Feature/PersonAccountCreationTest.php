@@ -36,6 +36,7 @@ class PersonAccountCreationTest extends TestCase
         Livewire::test('pages::dosen.add_edit', ['id' => 'add'])
             ->set('prodi_id', $prodi->id_prodi)
             ->set('nidn', '0123456789')
+            ->set('nip', '198001012010011001')
             ->set('nama', 'Dosen Input')
             ->set('email', 'DOSEN.INPUT@example.test')
             ->call('save')
@@ -46,9 +47,24 @@ class PersonAccountCreationTest extends TestCase
         $this->assertSame($user->id, Dosen::where('nidn', '0123456789')->value('user_id'));
         $this->assertTrue($user->hasRole('dosen'));
         $this->assertTrue(Auth::attempt([
-            'username' => '0123456789',
-            'password' => '0123456789',
+            'username' => '198001012010011001',
+            'password' => '198001012010011001',
         ]));
+    }
+
+    public function test_input_dosen_tanpa_nip_memakai_nidn_sebagai_username_dan_password(): void
+    {
+        Livewire::test('pages::dosen.add_edit', ['id' => 'add'])
+            ->set('nidn', '0123456789')
+            ->set('nama', 'Dosen Input Tanpa NIP')
+            ->set('email', 'dosen.input.tanpa.nip@example.test')
+            ->call('save')
+            ->assertHasNoErrors();
+
+        $user = User::where('email', 'dosen.input.tanpa.nip@example.test')->firstOrFail();
+
+        $this->assertSame('0123456789', $user->username);
+        $this->assertTrue(Hash::check('0123456789', $user->password));
     }
 
     public function test_input_mahasiswa_membuat_akun_yang_bisa_login(): void
@@ -81,6 +97,7 @@ class PersonAccountCreationTest extends TestCase
         (new DosenImport)->collection(new Collection([
             new Collection([
                 'nidn' => '0123456789',
+                'nip' => '198001012010011001',
                 'nama' => 'Dosen Uji',
                 'email' => 'DOSEN@example.test',
                 'kode_prodi' => 'MED',
@@ -93,11 +110,28 @@ class PersonAccountCreationTest extends TestCase
 
         $this->assertSame($user->id, $dosen->user_id);
         $this->assertTrue($user->hasRole('dosen'));
-        $this->assertTrue(Hash::check('0123456789', $user->password));
+        $this->assertTrue(Hash::check('198001012010011001', $user->password));
         $this->assertTrue(Auth::attempt([
-            'username' => '0123456789',
-            'password' => '0123456789',
+            'username' => '198001012010011001',
+            'password' => '198001012010011001',
         ]));
+    }
+
+    public function test_import_dosen_tanpa_nip_memakai_nidn_sebagai_username_dan_password(): void
+    {
+        (new DosenImport)->collection(new Collection([
+            new Collection([
+                'nidn' => '0123456789',
+                'nama' => 'Dosen Tanpa NIP',
+                'email' => 'tanpa.nip@example.test',
+                'status' => 'aktif',
+            ]),
+        ]));
+
+        $user = User::where('email', 'tanpa.nip@example.test')->firstOrFail();
+
+        $this->assertSame('0123456789', $user->username);
+        $this->assertTrue(Hash::check('0123456789', $user->password));
     }
 
     public function test_import_mahasiswa_membuat_akun_yang_bisa_login(): void

@@ -88,7 +88,7 @@ new class extends Component
 
     public function bolehBukaValidasi(): bool
     {
-        return AksesPertemuanBlok::bolehBukaValidasi(auth()->user());
+        return AksesPertemuanBlok::bolehBukaValidasi(auth()->user(), $this->pertemuan_blok_id);
     }
 
     public function simpan(): void
@@ -275,7 +275,7 @@ new class extends Component
                 . Presensi dan catatan monitoring terkunci.
             </div>
             @if ($bolehBuka)
-                <button type="button" class="btn btn-outline-danger btn-sm"
+                <button type="button" class="btn btn-danger btn-sm"
                     wire:click="bukaValidasi"
                     wire:confirm="Buka kembali validasi pertemuan ini agar bisa dikoreksi?">
                     <i class="ri-lock-unlock-line"></i> Buka Validasi

@@ -77,7 +77,7 @@ class DosenImport implements SkipsEmptyRows, ToCollection, WithHeadingRow
                         'name' => $nama,
                         'username' => $username,
                         'email' => $email,
-                        'password' => Hash::make($nidn ?: $nip ?: 'password'),
+                        'password' => Hash::make($username),
                     ]);
                 } else {
                     $user->update([

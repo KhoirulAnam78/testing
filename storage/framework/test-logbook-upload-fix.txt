@@ -1,0 +1,15 @@
+
+   PASS  Tests\Feature\LogbookPertemuanBlokTest
+  ✓ flag blok nonaktif menolak akses server                                                                                                                                                                          0.50s  
+  ✓ monitoring belum divalidasi menolak unggahan                                                                                                                                                                     0.07s  
+  ✓ mahasiswa hanya dapat mengunggah logbook pertemuan kelompoknya                                                                                                                                                   0.08s  
+  ✓ unggahan harus pdf maksimal 10240 kb                                                                                                                                                                             0.09s  
+  ✓ validator sah dapat validasi dan tolak dengan catatan wajib                                                                                                                                                      0.06s  
+  ✓ tab operasional menampilkan pertemuan dan membuka status logbook di modal                                                                                                                                        0.05s  
+  ✓ validator tidak sah ditolak dan pengelola dapat memvalidasi                                                                                                                                                      0.04s  
+  ✓ upload ulang menghapus file lama dan mengembalikan status menunggu                                                                                                                                               0.05s  
+  ✓ unduh private hanya untuk pemilik dan validator                                                                                                                                                                  0.04s  
+
+  Tests:    9 passed (50 assertions)
+  Duration: 1.03s
+

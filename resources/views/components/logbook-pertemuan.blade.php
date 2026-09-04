@@ -13,7 +13,9 @@ new class extends Component
     use WithFileUploads;
 
     public int $pertemuan_blok_id;
+
     public $file;
+
     public array $catatan = [];
 
     public function mount(int $pertemuan_blok_id): void
@@ -48,6 +50,8 @@ new class extends Component
 
         abort_if($lama?->status === 'valid', 422, 'Logbook tervalidasi sudah terkunci.');
 
+        $namaFileAsli = $this->file->getClientOriginalName();
+        $ukuranFile = $this->file->getSize();
         $pathBaru = $this->file->store("logbook/{$this->pertemuan_blok_id}", 'local');
         abort_unless($pathBaru, 500, 'File gagal disimpan.');
 
@@ -56,8 +60,8 @@ new class extends Component
                 ['pertemuan_blok_id' => $this->pertemuan_blok_id, 'mahasiswa_id' => $mahasiswaId],
                 [
                     'path_file' => $pathBaru,
-                    'nama_file_asli' => $this->file->getClientOriginalName(),
-                    'ukuran_file' => $this->file->getSize(),
+                    'nama_file_asli' => $namaFileAsli,
+                    'ukuran_file' => $ukuranFile,
                     'status' => 'menunggu',
                     'catatan_validasi' => null,
                     'diunggah_pada' => now(),
@@ -65,7 +69,7 @@ new class extends Component
                     'divalidasi_oleh_user_id' => null,
                 ]
             );
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             Storage::disk('local')->delete($pathBaru);
             throw $e;
         }
@@ -120,6 +124,7 @@ new class extends Component
         $pertemuan = PertemuanBlok::findOrFail($this->pertemuan_blok_id);
         $validator = AksesPertemuanBlok::bolehValidasiLogbook(auth()->user(), $this->pertemuan_blok_id);
         $mahasiswaId = (int) (auth()->user()?->mahasiswa?->id_mahasiswa ?? 0);
+        $bolehUnggah = AksesPertemuanBlok::bolehUnggahLogbook(auth()->user(), $this->pertemuan_blok_id, $mahasiswaId);
 
         $peserta = $validator
             ? PesertaBlok::query()
@@ -137,7 +142,7 @@ new class extends Component
             ->get()
             ->keyBy('mahasiswa_id');
 
-        return $this->view(compact('validator', 'mahasiswaId', 'peserta', 'logbooks'));
+        return $this->view(compact('validator', 'mahasiswaId', 'bolehUnggah', 'peserta', 'logbooks'));
     }
 };
 ?>
@@ -159,10 +164,14 @@ new class extends Component
                         {{ $logbook->catatan_validasi }}</div>
                 @endif
             @endif
-            @if (! $logbook || $logbook->status !== 'valid')
+            @if ((! $logbook || $logbook->status !== 'valid') && $bolehUnggah)
                 <input type="file" class="form-control mt-2" wire:model="file" accept="application/pdf">
                 @error('file') <div class="text-danger small">{{ $message }}</div> @enderror
                 <button class="btn btn-primary btn-sm mt-2" type="submit">Unggah PDF</button>
+            @elseif ((! $logbook || $logbook->status !== 'valid') && ! $bolehUnggah)
+                <div class="alert alert-info py-2 mt-2 mb-0">
+                    Logbook dapat diunggah setelah monitoring pertemuan divalidasi.
+                </div>
             @endif
         </form>
     @else

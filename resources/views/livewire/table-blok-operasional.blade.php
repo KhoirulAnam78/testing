@@ -3,29 +3,39 @@
 
     <style>
         .blok-card {
-            border: 1px solid var(--vz-border-color) !important;
-            border-top: 3px solid var(--vz-primary) !important;
+            --blok-accent: var(--vz-primary);
+            --blok-accent-rgb: var(--vz-primary-rgb);
+            border: 2px solid var(--blok-accent) !important;
+            overflow: hidden;
             transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease;
         }
 
         .blok-card:hover {
-            border-color: rgba(var(--vz-primary-rgb), .35) !important;
-            box-shadow: 0 .5rem 1.25rem rgba(30, 32, 37, .08) !important;
+            box-shadow: 0 .65rem 1.5rem rgba(var(--blok-accent-rgb), .28) !important;
             transform: translateY(-2px);
         }
 
-        .blok-card__code {
-            letter-spacing: .04em;
+        .blok-card__header {
+            background: var(--blok-accent);
+            color: #fff;
+        }
+
+        .blok-card__icon {
+            align-items: center;
+            background: rgba(255, 255, 255, .2);
+            border: 1px solid rgba(255, 255, 255, .45);
+            border-radius: .65rem;
+            color: #fff;
+            display: inline-flex;
+            flex: 0 0 2.5rem;
+            font-size: 1.2rem;
+            height: 2.5rem;
+            justify-content: center;
         }
 
         .blok-card__stat {
-            background: var(--vz-light);
-            border: 1px solid var(--vz-border-color);
-            transition: background-color .2s ease;
-        }
-
-        .blok-card:hover .blok-card__stat {
-            background: rgba(var(--vz-primary-rgb), .06);
+            background: var(--blok-accent);
+            color: #fff;
         }
 
         @media (prefers-reduced-motion: reduce) {
@@ -114,16 +124,16 @@
             <div class="row g-3">
                 @foreach ($bloks as $blok)
                     <div class="col-12 col-xl-6" wire:key="blok-operasional-{{ $blok->id }}">
-                        <article class="card blok-card h-100 shadow-none mb-0 overflow-hidden">
-                            <div class="card-body d-flex flex-column">
-                                <div class="d-flex align-items-start justify-content-between gap-3 mb-3">
-                                    <div class="min-w-0">
-                                        <span class="badge blok-card__code bg-primary-subtle text-primary border border-primary-subtle mb-2">
-                                            <i class="ri-layout-grid-line me-1"></i>{{ $blok->kode }}
-                                        </span>
-                                        <h5 class="card-title mb-1">{{ $blok->nama }}</h5>
-                                        <div class="text-muted small">
-                                            <i class="ri-graduation-cap-line me-1"></i>{{ $blok->prodi?->nama ?: '-' }}
+                        <article class="card blok-card h-100 shadow-none mb-0">
+                            <div class="blok-card__header p-3">
+                                <div class="d-flex align-items-start gap-3">
+                                    <span class="blok-card__icon" aria-hidden="true">
+                                        <i class="ri-settings-3-line"></i>
+                                    </span>
+                                    <div class="min-w-0 flex-grow-1">
+                                        <h5 class="card-title text-white mb-1">{{ $blok->nama }}</h5>
+                                        <div class="small text-white">
+                                            {{ $blok->prodi?->nama ?: '-' }}
                                             <span class="mx-1">&middot;</span>
                                             {{ $blok->semester ? ucfirst($blok->semester->nama).' '.$blok->semester->tahun : '-' }}
                                         </div>
@@ -131,13 +141,15 @@
                                     <a
                                         href="{{ route('blok-operasional.detail', ['id' => Crypt::encrypt($blok->id)]) }}"
                                         wire:navigate
-                                        class="btn btn-info btn-sm flex-shrink-0"
+                                        class="btn btn-light text-primary btn-sm flex-shrink-0"
                                         aria-label="Kelola {{ $blok->nama }}"
                                     >
                                         <i class="ri-settings-3-line me-1"></i>Kelola
                                     </a>
                                 </div>
+                            </div>
 
+                            <div class="card-body d-flex flex-column">
                                 <div class="mb-3">
                                     <div class="text-muted small mb-1">Mata kuliah</div>
                                     <div class="d-flex flex-wrap gap-1">
@@ -156,29 +168,34 @@
                                     {{ $blok->tanggal_selesai?->format('d/m/Y') ?: '-' }}
                                 </div>
 
+                                <div class="text-muted small mb-3">
+                                    <i class="ri-team-line me-1"></i>
+                                    Pengelola: {{ $blok->pengelola_blok->pluck('dosen.nama')->filter()->join(', ') ?: '-' }}
+                                </div>
+
                                 <div class="row g-2 mt-auto text-center">
                                     <div class="col-4">
                                         <div class="blok-card__stat rounded py-2 px-1">
-                                            <div class="fw-semibold text-primary">
+                                            <div class="fw-semibold">
                                                 <i class="ri-user-3-line me-1"></i>{{ $blok->peserta_blok_count }}
                                             </div>
-                                            <div class="text-muted small">Peserta</div>
+                                            <div class="small">Peserta</div>
                                         </div>
                                     </div>
                                     <div class="col-4">
                                         <div class="blok-card__stat rounded py-2 px-1">
-                                            <div class="fw-semibold text-primary">
+                                            <div class="fw-semibold">
                                                 <i class="ri-group-line me-1"></i>{{ $blok->kelompok_blok_count }}
                                             </div>
-                                            <div class="text-muted small">Kelompok</div>
+                                            <div class="small">Kelompok</div>
                                         </div>
                                     </div>
                                     <div class="col-4">
                                         <div class="blok-card__stat rounded py-2 px-1">
-                                            <div class="fw-semibold text-primary">
+                                            <div class="fw-semibold">
                                                 <i class="ri-calendar-check-line me-1"></i>{{ $blok->pertemuan_blok_count }}
                                             </div>
-                                            <div class="text-muted small">Pertemuan</div>
+                                            <div class="small">Pertemuan</div>
                                         </div>
                                     </div>
                                 </div>

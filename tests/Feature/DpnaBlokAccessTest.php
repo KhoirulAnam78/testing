@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Blok;
 use App\Models\Dosen;
+use App\Models\PengelolaBlok;
 use App\Models\Prodi;
 use App\Models\Semester;
 use App\Models\User;
@@ -31,12 +32,26 @@ class DpnaBlokAccessTest extends TestCase
     {
         $user = User::factory()->create();
         $dosen = Dosen::create(['user_id' => $user->id, 'nama' => 'Koordinator DPNA']);
-        $milik = $this->blok(['koordinator_id' => $dosen->id_dosen, 'kode' => 'DPNA-A']);
+        $milik = $this->blok(['kode' => 'DPNA-A']);
+        PengelolaBlok::create(['blok_id' => $milik->id, 'dosen_id' => $dosen->id_dosen, 'jabatan' => 'koordinator']);
         $lain = $this->blok(['kode' => 'DPNA-B']);
 
         $this->actingAs($user)->get(route('dpna-blok.index'))->assertOk();
         $this->get(route('dpna-blok.detail', Crypt::encrypt($milik->id)))->assertOk();
         $this->get(route('dpna-blok.detail', Crypt::encrypt($lain->id)))->assertRedirectToRoute('dashboard');
+    }
+
+    public function test_semua_jabatan_pengelola_dapat_membuka_dpna_bloknya(): void
+    {
+        foreach (['koordinator', 'asisten_koordinator', 'kontributor'] as $jabatan) {
+            $user = User::factory()->create();
+            $dosen = Dosen::create(['user_id' => $user->id, 'nama' => str($jabatan)->headline()]);
+            $blok = $this->blok(['kode' => 'DPNA-'.str()->random(5)]);
+            PengelolaBlok::create(compact('jabatan') + ['blok_id' => $blok->id, 'dosen_id' => $dosen->id_dosen]);
+
+            $this->actingAs($user)->get(route('dpna-blok.detail', Crypt::encrypt($blok->id)))->assertOk();
+            $this->get(route('blok-operasional.detail', Crypt::encrypt($blok->id)))->assertOk();
+        }
     }
 
     public function test_dosen_biasa_dan_mahasiswa_ditolak(): void

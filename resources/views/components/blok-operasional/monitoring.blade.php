@@ -58,7 +58,7 @@ new class extends Component
     {
         $this->blok_id = (int) $blok_id;
 
-        $blok = Blok::select(['id', 'koordinator_id', 'asisten_koordinator_id'])->findOrFail($this->blok_id);
+        $blok = Blok::select('id')->findOrFail($this->blok_id);
 
         abort_unless($blok->dapatDikelolaOleh(auth()->user()), 403);
     }
@@ -502,12 +502,12 @@ new class extends Component
                                     @endif
                                 </td>
                                 <td class="text-end">
-                                    <button type="button" class="btn btn-outline-secondary btn-sm"
+                                    <button type="button" class="btn btn-secondary btn-sm"
                                         wire:click="kelolaPelaksanaan('{{ $item->id_pertemuan_blok }}', 'pelaksanaan')">
                                         <i class="ri-booklet-line"></i> Isi Monitoring
                                     </button>
                                     @if ($item->aturan_kegiatan_blok?->perlu_penilaian)
-                                        <button type="button" class="btn btn-outline-info btn-sm mt-1"
+                                        <button type="button" class="btn btn-info btn-sm mt-1"
                                             wire:click="kelolaPelaksanaan('{{ $item->id_pertemuan_blok }}', 'nilai')">
                                             <i class="ri-graduation-cap-line"></i> Nilai
                                         </button>

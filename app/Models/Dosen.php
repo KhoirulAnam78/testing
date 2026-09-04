@@ -31,4 +31,9 @@ class Dosen extends Model
     {
         return $this->hasMany(DosenPertemuanBlok::class, 'dosen_id', 'id_dosen');
     }
+
+    public function pengelola_blok(): HasMany
+    {
+        return $this->hasMany(PengelolaBlok::class, 'dosen_id', 'id_dosen');
+    }
 }

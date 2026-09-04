@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasManyThrough;
+use Illuminate\Database\Eloquent\Relations\HasOneThrough;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 
@@ -38,14 +39,33 @@ class Blok extends Model
         return $this->belongsTo(Semester::class, 'semester_id', 'id_semester');
     }
 
-    public function koordinator(): BelongsTo
+    public function pengelola_blok(): HasMany
     {
-        return $this->belongsTo(Dosen::class, 'koordinator_id', 'id_dosen');
+        return $this->hasMany(PengelolaBlok::class, 'blok_id');
     }
 
-    public function asisten_koordinator(): BelongsTo
+    public function koordinator(): HasOneThrough
     {
-        return $this->belongsTo(Dosen::class, 'asisten_koordinator_id', 'id_dosen');
+        return $this->hasOneThrough(
+            Dosen::class,
+            PengelolaBlok::class,
+            'blok_id',
+            'id_dosen',
+            'id',
+            'dosen_id',
+        )->where('pengelola_blok.jabatan', 'koordinator');
+    }
+
+    public function asisten_koordinator(): HasOneThrough
+    {
+        return $this->hasOneThrough(
+            Dosen::class,
+            PengelolaBlok::class,
+            'blok_id',
+            'id_dosen',
+            'id',
+            'dosen_id',
+        )->where('pengelola_blok.jabatan', 'asisten_koordinator');
     }
 
     public function scopeDapatDikelolaOleh(Builder $query, ?Authenticatable $user): Builder
@@ -60,11 +80,7 @@ class Blok extends Model
             return $query->whereRaw('1 = 0');
         }
 
-        return $query->where(
-            fn (Builder $query) => $query
-                ->where('koordinator_id', $dosenId)
-                ->orWhere('asisten_koordinator_id', $dosenId)
-        );
+        return $query->whereHas('pengelola_blok', fn (Builder $query) => $query->where('dosen_id', $dosenId));
     }
 
     public function dapatDikelolaOleh(?Authenticatable $user): bool
@@ -75,10 +91,7 @@ class Blok extends Model
 
         $dosenId = $user?->dosen?->id_dosen;
 
-        return $dosenId !== null && in_array($dosenId, [
-            $this->koordinator_id,
-            $this->asisten_koordinator_id,
-        ]);
+        return $dosenId !== null && $this->pengelola_blok()->where('dosen_id', $dosenId)->exists();
     }
 
     public function aturan_kegiatan_blok(): HasMany

@@ -139,7 +139,7 @@ class DashboardRoleTest extends TestCase
             'durasi_menit_default' => 100, 'status' => 'aktif', 'created_at' => now(), 'updated_at' => now(),
         ]);
         $aturanId = DB::table('aturan_kegiatan_blok')->insertGetId([
-            'blok_id' => $blokId, 'jenis_kegiatan_id' => $jenisId, 'jumlah_pertemuan' => 1,
+            'blok_id' => $blokId, 'jenis_kegiatan_id' => $jenisId,
             'durasi_menit' => 100, 'perlu_kelompok' => true, 'created_at' => now(), 'updated_at' => now(),
         ]);
         $materiBlokId = DB::table('materi_blok')->insertGetId([

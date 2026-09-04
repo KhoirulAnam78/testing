@@ -165,7 +165,7 @@ new #[Layout('layouts.app')] class extends Component {
                             </tr>
                             @foreach ($data['kegiatan'] as $aturan)
                                 <tr wire:key="bobot-{{ $aturan->id }}">
-                                    <td><span class="fw-semibold">{{ $aturan->jenis_kegiatan->nama }}</span><div class="text-muted small">Rata-rata nilai {{ $aturan->pertemuan_blok_count }} pertemuan.</div></td>
+                                    <td><span class="fw-semibold">{{ $aturan->jenis_kegiatan?->nama }}</span><div class="text-muted small">Rata-rata nilai {{ $aturan->materi_rinci_blok_count }} pertemuan per mahasiswa.</div></td>
                                     <td class="text-center"><input class="form-check-input" type="checkbox" wire:model.live="kegiatan.{{ $aturan->id }}.aktif" aria-label="Aktifkan {{ $aturan->jenis_kegiatan->nama }}"></td>
                                     <td><input class="form-control" type="number" min="0" max="100" step="0.01" wire:model="kegiatan.{{ $aturan->id }}.bobot" @disabled(!($kegiatan[$aturan->id]['aktif'] ?? false))>@error("kegiatan.{$aturan->id}.bobot")<div class="text-danger small">{{ $message }}</div>@enderror</td>
                                 </tr>

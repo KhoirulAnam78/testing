@@ -9,6 +9,7 @@ use App\Models\KomponenPenilaianBlok;
 use App\Models\MataKuliah;
 use App\Models\MateriBlok;
 use App\Models\MateriRinciBlok;
+use App\Models\PengelolaBlok;
 use App\Models\Prodi;
 use App\Models\Semester;
 use Illuminate\Contracts\Encryption\DecryptException;
@@ -33,7 +34,7 @@ new #[Layout('layouts.app')] class extends Component
 
     public $asisten_koordinator_id;
 
-    public $kode;
+    public array $selected_kontributor_ids = [];
 
     public $nama;
 
@@ -86,7 +87,7 @@ new #[Layout('layouts.app')] class extends Component
             ->get()
             ->map(fn (Blok $blok) => [
                 'id' => (string) $blok->id,
-                'label' => $blok->kode.' - '.$blok->nama.' | '.$blok->prodi?->nama.' | '.($blok->semester ? ucfirst($blok->semester->nama).' '.$blok->semester->tahun : '-'),
+                'label' => $blok->nama.' | '.$blok->prodi?->nama.' | '.($blok->semester ? ucfirst($blok->semester->nama).' '.$blok->semester->tahun : '-'),
             ])
             ->all();
 
@@ -98,14 +99,20 @@ new #[Layout('layouts.app')] class extends Component
             }
 
             $blok = Blok::with([
+                'pengelola_blok',
                 'aturan_kegiatan_blok.materi_blok.materi_rinci_blok',
                 'aturan_kegiatan_blok.komponen_penilaian_blok',
             ])->findOrFail($this->edit_id);
             $this->prodi_id = $blok->prodi_id;
             $this->semester_id = $blok->semester_id;
-            $this->koordinator_id = $blok->koordinator_id;
-            $this->asisten_koordinator_id = $blok->asisten_koordinator_id;
-            $this->kode = $blok->kode;
+            $this->koordinator_id = $blok->pengelola_blok->firstWhere('jabatan', 'koordinator')?->dosen_id;
+            $this->asisten_koordinator_id = $blok->pengelola_blok->firstWhere('jabatan', 'asisten_koordinator')?->dosen_id;
+            $this->selected_kontributor_ids = $blok->pengelola_blok
+                ->where('jabatan', 'kontributor')
+                ->pluck('dosen_id')
+                ->map(fn ($id) => (string) $id)
+                ->values()
+                ->all();
             $this->nama = $blok->nama;
             $this->sks = $blok->sks;
             $this->tanggal_mulai = $blok->tanggal_mulai?->format('Y-m-d');
@@ -938,14 +945,12 @@ new #[Layout('layouts.app')] class extends Component
             'semester_id' => ['required', 'exists:semester,id_semester'],
             'koordinator_id' => ['required', 'exists:dosen,id_dosen'],
             'asisten_koordinator_id' => ['required', 'different:koordinator_id', 'exists:dosen,id_dosen'],
-            'kode' => [
-                'required',
-                'string',
-                'max:255',
-                Rule::unique('blok', 'kode')
-                    ->where('prodi_id', $this->prodi_id)
-                    ->where('semester_id', $this->semester_id)
-                    ->ignore($this->edit_id),
+            'selected_kontributor_ids' => ['array'],
+            'selected_kontributor_ids.*' => [
+                'integer',
+                'distinct',
+                'exists:dosen,id_dosen',
+                Rule::notIn(array_filter([$this->koordinator_id, $this->asisten_koordinator_id])),
             ],
             'nama' => ['required', 'string', 'max:255'],
             'sks' => ['required', 'numeric', 'min:0.5', 'max:99.9'],
@@ -960,8 +965,8 @@ new #[Layout('layouts.app')] class extends Component
             'koordinator_id.required' => 'Koordinator blok wajib dipilih.',
             'asisten_koordinator_id.required' => 'Asisten koordinator blok wajib dipilih.',
             'asisten_koordinator_id.different' => 'Asisten koordinator harus berbeda dari koordinator.',
-            'kode.required' => 'Kode blok wajib diisi.',
-            'kode.unique' => 'Kode blok sudah digunakan pada prodi dan semester ini.',
+            'selected_kontributor_ids.*.distinct' => 'Kontributor tidak boleh duplikat.',
+            'selected_kontributor_ids.*.not_in' => 'Kontributor harus berbeda dari koordinator dan asisten koordinator.',
             'nama.required' => 'Nama blok wajib diisi.',
             'tanggal_selesai.after_or_equal' => 'Tanggal selesai tidak boleh sebelum tanggal mulai.',
         ]);
@@ -983,10 +988,19 @@ new #[Layout('layouts.app')] class extends Component
         }
 
         DB::transaction(function () use ($payload, $selectedIds) {
-            $blokPayload = collect($payload)->except('selected_mata_kuliah_ids')->toArray();
+            $blokPayload = collect($payload)->except([
+                'koordinator_id',
+                'asisten_koordinator_id',
+                'selected_kontributor_ids',
+                'selected_mata_kuliah_ids',
+            ])->toArray();
             $blokPayload['status'] = 'aktif';
+            if (! $this->edit_id) {
+                $blokPayload['kode'] = bin2hex(random_bytes(16));
+            }
             $blok = Blok::updateOrCreate(['id' => $this->edit_id], $blokPayload);
             $this->edit_id = $blok->id;
+            $this->simpanPengelola($blok, $payload);
 
             MataKuliah::where('blok_id', $blok->id)
                 ->when($selectedIds->isNotEmpty(), fn ($query) => $query->whereNotIn('id', $selectedIds))
@@ -999,6 +1013,29 @@ new #[Layout('layouts.app')] class extends Component
                     ->update(['blok_id' => $blok->id]);
             }
         });
+    }
+
+    private function simpanPengelola(Blok $blok, array $payload): void
+    {
+        $kontributorIds = collect($payload['selected_kontributor_ids'] ?? [])
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values();
+        $now = now();
+        $rows = collect([
+            ['dosen_id' => (int) $payload['koordinator_id'], 'jabatan' => 'koordinator'],
+            ['dosen_id' => (int) $payload['asisten_koordinator_id'], 'jabatan' => 'asisten_koordinator'],
+        ])->concat($kontributorIds->map(fn (int $id) => [
+            'dosen_id' => $id,
+            'jabatan' => 'kontributor',
+        ]))->map(fn (array $row) => $row + [
+            'blok_id' => $blok->id,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ])->all();
+
+        PengelolaBlok::where('blok_id', $blok->id)->delete();
+        PengelolaBlok::insert($rows);
     }
 
     private function simpanKegiatan(): void
@@ -1225,14 +1262,12 @@ new #[Layout('layouts.app')] class extends Component
                 'semester_id' => ['required', 'exists:semester,id_semester'],
                 'koordinator_id' => ['required', 'exists:dosen,id_dosen'],
                 'asisten_koordinator_id' => ['required', 'different:koordinator_id', 'exists:dosen,id_dosen'],
-                'kode' => [
-                    'required',
-                    'string',
-                    'max:255',
-                    Rule::unique('blok', 'kode')
-                        ->where('prodi_id', $this->prodi_id)
-                        ->where('semester_id', $this->semester_id)
-                        ->ignore($this->edit_id),
+                'selected_kontributor_ids' => ['array'],
+                'selected_kontributor_ids.*' => [
+                    'integer',
+                    'distinct',
+                    'exists:dosen,id_dosen',
+                    Rule::notIn(array_filter([$this->koordinator_id, $this->asisten_koordinator_id])),
                 ],
                 'nama' => ['required', 'string', 'max:255'],
                 'sks' => ['required', 'numeric', 'min:0.5', 'max:99.9'],
@@ -1285,8 +1320,9 @@ new #[Layout('layouts.app')] class extends Component
                 'asisten_koordinator_id.required' => 'Asisten koordinator blok wajib dipilih.',
                 'asisten_koordinator_id.different' => 'Asisten koordinator harus berbeda dari koordinator.',
                 'asisten_koordinator_id.exists' => 'Asisten koordinator blok tidak valid.',
-                'kode.required' => 'Kode blok wajib diisi.',
-                'kode.unique' => 'Kode blok sudah digunakan pada prodi dan semester ini.',
+                'selected_kontributor_ids.*.distinct' => 'Kontributor tidak boleh duplikat.',
+                'selected_kontributor_ids.*.not_in' => 'Kontributor harus berbeda dari koordinator dan asisten koordinator.',
+                'selected_kontributor_ids.*.exists' => 'Kontributor tidak valid.',
                 'nama.required' => 'Nama blok wajib diisi.',
                 'sks.required' => 'SKS wajib diisi.',
                 'tanggal_selesai.after_or_equal' => 'Tanggal selesai tidak boleh sebelum tanggal mulai.',
@@ -1421,14 +1457,22 @@ new #[Layout('layouts.app')] class extends Component
                 ->unique()
                 ->values()
                 ->all();
-            $blokPayload = collect($payload)->except('aturan', 'selected_mata_kuliah_ids')->toArray();
+            $blokPayload = collect($payload)->except([
+                'aturan',
+                'koordinator_id',
+                'asisten_koordinator_id',
+                'selected_kontributor_ids',
+                'selected_mata_kuliah_ids',
+            ])->toArray();
 
             if (! $this->edit_id) {
                 $blokPayload['status'] = 'aktif';
+                $blokPayload['kode'] = bin2hex(random_bytes(16));
             }
 
             $blok = Blok::updateOrCreate(['id' => $this->edit_id], $blokPayload);
             $savedIds = [];
+            $this->simpanPengelola($blok, $payload);
 
             MataKuliah::where('blok_id', $blok->id)
                 ->when(! empty($selectedMataKuliahIds), fn ($query) => $query->whereNotIn('id', $selectedMataKuliahIds))
@@ -1710,6 +1754,21 @@ new #[Layout('layouts.app')] class extends Component
                                     </div>
                                 </div>
                                 <div class="mb-3">
+                                    <livewire:dropdown.multi-select-search
+                                        :query="'App\Models\Dosen'"
+                                        :wire_model="'selected_kontributor_ids'"
+                                        :label="'Kontributor Blok'"
+                                        :colSearch="'nama'"
+                                        :colSubtitle="'nidn'"
+                                        :colValue="'id_dosen'"
+                                        :selected="$selected_kontributor_ids"
+                                        conditions="status = 'aktif'"
+                                        :limit="10"
+                                        :key="'kontributor-blok-'.$edit_id"
+                                    />
+                                    @error('selected_kontributor_ids.*') <div class="text-sm text-danger">{{ $message }}</div> @enderror
+                                </div>
+                                <div class="mb-3">
                                     <label class="form-label">Nama Blok</label>
                                     <input type="text" class="form-control" wire:model.live.debounce.500ms="nama">
                                     @error('nama') <div class="text-sm text-danger">{{ $message }}</div> @enderror
@@ -1765,7 +1824,7 @@ new #[Layout('layouts.app')] class extends Component
                             <div>
                                 @error('aturan') <div class="alert alert-danger py-2 mb-0 alert-dismissible fade show" role="alert"><button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Tutup"></button>{{ $message }}</div> @enderror
                             </div>
-                            <button type="button" class="btn btn-outline-primary btn-sm" wire:click="applyTemplateStandar">
+                            <button type="button" class="btn btn-primary btn-sm" wire:click="applyTemplateStandar">
                                 <i class="ri-magic-line"></i> Gunakan Template Standar
                             </button>
                         </div>
@@ -1776,67 +1835,86 @@ new #[Layout('layouts.app')] class extends Component
                                 $materiCount = count($item['materi'] ?? []);
                                 $rinciCount = collect($item['materi'] ?? [])->sum(fn ($materi) => count($materi['rinci'] ?? []));
                             @endphp
-                            <div class="border rounded p-3 mb-3" wire:key="aturan-config-{{ $index }}">
-                                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-                                    <div class="d-flex flex-wrap align-items-center gap-2">
-                                        <span class="fw-semibold">{{ $jenisTerpilih ? $jenisTerpilih->nama : 'Kegiatan belum dipilih' }}</span>
-                                        <span class="badge bg-primary-subtle text-primary">{{ $materiCount }} materi</span>
-                                        <span class="badge bg-secondary-subtle text-secondary">{{ $rinciCount }} rincian</span>
-                                        <span class="badge bg-success-subtle text-success">Kelompok belajar</span>
-                                    </div>
-                                    <button type="button" class="btn btn-danger btn-sm" wire:click="removeAturan({{ $index }})" @disabled(count($aturan) <= 1)>
-                                        <i class="ri-delete-bin-line"></i> Hapus
-                                    </button>
-                                </div>
-                                <div class="row g-3">
-                                    <div class="col-lg-4 mb-3">
-                                        <label class="form-label">Jenis Kegiatan</label>
-                                        <select class="form-select" wire:model.live="aturan.{{ $index }}.jenis_kegiatan_id">
-                                            <option value="">Pilih jenis kegiatan</option>
-                                            @foreach ($jenis_kegiatan as $jenis)
-                                                <option
-                                                    value="{{ $jenis->id }}"
-                                                    @disabled(collect($aturan)->except($index)->pluck('jenis_kegiatan_id')->contains(fn ($id) => (int) $id === (int) $jenis->id))
-                                                >{{ $jenis->kode }} - {{ $jenis->nama }}</option>
-                                            @endforeach
-                                        </select>
-                                        @error("aturan.$index.jenis_kegiatan_id") <div class="text-sm text-danger">{{ $message }}</div> @enderror
-                                    </div>
-                                    <div class="col-md-3 col-lg-2 mb-3">
-                                        <label class="form-label">Menit</label>
-                                        <input type="number" class="form-control" wire:model.live="aturan.{{ $index }}.durasi_menit">
-                                        @error("aturan.$index.durasi_menit") <div class="text-sm text-danger">{{ $message }}</div> @enderror
-                                    </div>
-                                    <div class="col-md-3 col-lg-2 mb-3">
-                                        <label class="form-label">Urutan</label>
-                                        <input type="number" class="form-control" wire:model="aturan.{{ $index }}.urutan">
-                                        @error("aturan.$index.urutan") <div class="text-sm text-danger">{{ $message }}</div> @enderror
+                            <div class="card border shadow-sm mb-3 aturan-card" wire:key="aturan-config-{{ $index }}">
+                                <div class="card-header bg-light-subtle border-bottom">
+                                    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+                                        <div class="d-flex flex-wrap align-items-center gap-2">
+                                            <span class="badge bg-primary rounded-pill px-2">#{{ $index + 1 }}</span>
+                                            <div class="d-flex flex-column">
+                                                <span class="text-uppercase small text-muted fw-semibold lh-1">Kegiatan</span>
+                                                <span class="fw-semibold fs-15">{{ $jenisTerpilih ? $jenisTerpilih->nama : 'Kegiatan belum dipilih' }}</span>
+                                            </div>
+                                            <span class="badge bg-primary-subtle text-primary">{{ $materiCount }} materi</span>
+                                            <span class="badge bg-secondary-subtle text-secondary">{{ $rinciCount }} rincian</span>
+                                            <span class="badge bg-success-subtle text-success">Kelompok belajar</span>
+                                        </div>
+                                        <button type="button" class="btn btn-danger btn-sm" wire:click="removeAturan({{ $index }})" @disabled(count($aturan) <= 1)>
+                                            <i class="ri-delete-bin-line"></i> Hapus
+                                        </button>
                                     </div>
                                 </div>
-                                <div class="d-flex flex-wrap gap-4">
-                                    <div class="form-check form-switch">
-                                        <input class="form-check-input" type="checkbox" role="switch" id="perlu_presensi_{{ $index }}" wire:model="aturan.{{ $index }}.perlu_presensi">
-                                        <label class="form-check-label" for="perlu_presensi_{{ $index }}">Presensi</label>
+                                <div class="card-body">
+                                    <div class="row g-3">
+                                        <div class="col-lg-5 mb-3">
+                                            <label class="form-label">Jenis Kegiatan</label>
+                                            <select class="form-select" wire:model.live="aturan.{{ $index }}.jenis_kegiatan_id">
+                                                <option value="">Pilih jenis kegiatan</option>
+                                                @foreach ($jenis_kegiatan as $jenis)
+                                                    <option
+                                                        value="{{ $jenis->id }}"
+                                                        @disabled(collect($aturan)->except($index)->pluck('jenis_kegiatan_id')->contains(fn ($id) => (int) $id === (int) $jenis->id))
+                                                    >{{ $jenis->kode }} - {{ $jenis->nama }}</option>
+                                                @endforeach
+                                            </select>
+                                            @error("aturan.$index.jenis_kegiatan_id") <div class="text-sm text-danger">{{ $message }}</div> @enderror
+                                        </div>
+                                        <div class="col-md-6 col-lg-3 mb-3">
+                                            <label class="form-label">Durasi (Menit)</label>
+                                            <input type="number" class="form-control" wire:model.live="aturan.{{ $index }}.durasi_menit">
+                                            @error("aturan.$index.durasi_menit") <div class="text-sm text-danger">{{ $message }}</div> @enderror
+                                        </div>
+                                        <div class="col-md-6 col-lg-2 mb-3">
+                                            <label class="form-label">Urutan</label>
+                                            <input type="number" class="form-control" wire:model="aturan.{{ $index }}.urutan">
+                                            @error("aturan.$index.urutan") <div class="text-sm text-danger">{{ $message }}</div> @enderror
+                                        </div>
                                     </div>
-                                    <div class="form-check form-switch">
-                                        <input class="form-check-input" type="checkbox" role="switch" id="perlu_logbook_{{ $index }}" wire:model="aturan.{{ $index }}.perlu_logbook">
-                                        <label class="form-check-label" for="perlu_logbook_{{ $index }}">Logbook</label>
+                                    <hr class="my-3">
+                                    <div class="row g-3 align-items-center">
+                                        <div class="col-lg-7">
+                                            <span class="text-uppercase small text-muted fw-semibold d-block mb-2">Pengaturan Kegiatan</span>
+                                            <div class="d-flex flex-wrap gap-4">
+                                                <div class="form-check form-switch">
+                                                    <input class="form-check-input" type="checkbox" role="switch" id="perlu_presensi_{{ $index }}" wire:model="aturan.{{ $index }}.perlu_presensi">
+                                                    <label class="form-check-label" for="perlu_presensi_{{ $index }}">Presensi</label>
+                                                </div>
+                                                <div class="form-check form-switch">
+                                                    <input class="form-check-input" type="checkbox" role="switch" id="perlu_logbook_{{ $index }}" wire:model="aturan.{{ $index }}.perlu_logbook">
+                                                    <label class="form-check-label" for="perlu_logbook_{{ $index }}">Logbook</label>
+                                                </div>
+                                                <div class="form-check form-switch">
+                                                    <input class="form-check-input" type="checkbox" role="switch" id="perlu_penilaian_{{ $index }}" wire:model.live="aturan.{{ $index }}.perlu_penilaian">
+                                                    <label class="form-check-label" for="perlu_penilaian_{{ $index }}">
+                                                        Penilaian
+                                                        @if (! empty($item['komponen']))
+                                                            <span class="badge bg-light text-dark border">{{ count($item['komponen']) }} komponen</span>
+                                                        @endif
+                                                    </label>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="col-lg-5">
+                                            <span class="text-uppercase small text-muted fw-semibold d-block mb-2">Aksi Cepat</span>
+                                            <div class="d-flex flex-wrap gap-2">
+                                                <button type="button" class="btn btn-soft-info btn-sm" wire:click="setActiveAturan({{ $index }})">
+                                                    <i class="ri-book-open-line"></i> Isi Materi
+                                                </button>
+                                                <button type="button" class="btn btn-soft-secondary btn-sm" wire:click="setActivePenilaian({{ $index }})">
+                                                    <i class="ri-graduation-cap-line"></i> Isi Penilaian
+                                                </button>
+                                            </div>
+                                        </div>
                                     </div>
-                                    <div class="form-check form-switch">
-                                        <input class="form-check-input" type="checkbox" role="switch" id="perlu_penilaian_{{ $index }}" wire:model.live="aturan.{{ $index }}.perlu_penilaian">
-                                        <label class="form-check-label" for="perlu_penilaian_{{ $index }}">
-                                            Penilaian
-                                            @if (! empty($item['komponen']))
-                                                <span class="badge bg-light text-dark border">{{ count($item['komponen']) }} komponen</span>
-                                            @endif
-                                        </label>
-                                    </div>
-                                    <button type="button" class="btn btn-soft-info btn-sm ms-auto" wire:click="setActiveAturan({{ $index }})">
-                                        <i class="ri-book-open-line"></i> Isi Materi
-                                    </button>
-                                    <button type="button" class="btn btn-soft-secondary btn-sm" wire:click="setActivePenilaian({{ $index }})">
-                                        <i class="ri-graduation-cap-line"></i> Isi Penilaian
-                                    </button>
                                 </div>
                             </div>
                         @endforeach
@@ -1988,7 +2066,7 @@ new #[Layout('layouts.app')] class extends Component
                                             @endforeach
 
                                             <div class="d-flex justify-content-end mt-2">
-                                                <button type="button" class="btn btn-outline-primary btn-sm" wire:click="addRinci({{ $active_aturan_index }}, {{ $materiIndex }})">
+                                                <button type="button" class="btn btn-primary btn-sm" wire:click="addRinci({{ $active_aturan_index }}, {{ $materiIndex }})">
                                                     <i class="ri-add-box-fill"></i> Tambah Rincian
                                                 </button>
                                             </div>
@@ -1996,7 +2074,7 @@ new #[Layout('layouts.app')] class extends Component
                                     @endforeach
 
                                     <div class="d-flex justify-content-end">
-                                        <button type="button" class="btn btn-outline-primary btn-sm" wire:click="addMateri({{ $active_aturan_index }})">
+                                        <button type="button" class="btn btn-primary btn-sm" wire:click="addMateri({{ $active_aturan_index }})">
                                             <i class="ri-add-box-fill"></i> Tambah Pokok Materi
                                         </button>
                                     </div>
@@ -2043,7 +2121,7 @@ new #[Layout('layouts.app')] class extends Component
                                                 Komponen yang dinilai dosen pada setiap pertemuan kegiatan ini.
                                             </div>
                                         </div>
-                                        <button type="button" class="btn btn-outline-secondary btn-sm" wire:click="ambilStandarPenilaian({{ $active_aturan_index }})">
+                                        <button type="button" class="btn btn-secondary btn-sm" wire:click="ambilStandarPenilaian({{ $active_aturan_index }})">
                                             <i class="ri-download-2-line"></i> Ambil dari Standar
                                         </button>
                                     </div>

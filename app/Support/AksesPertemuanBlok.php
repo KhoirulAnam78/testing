@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use App\Models\MateriRinciBlok;
 use App\Models\MonitoringPertemuanBlok;
 use App\Models\PertemuanBlok;
 use App\Models\User;
@@ -32,14 +33,28 @@ class AksesPertemuanBlok
      * Lampiran default berlaku untuk semua kelompok, jadi hanya pengelola yang boleh
      * mengubahnya. Dosen satu kelompok tidak boleh menimpa materi kelompok lain.
      */
-    public static function bolehKelolaLampiranDefault(?User $user): bool
+    public static function bolehKelolaLampiranDefault(?User $user, int $materiRinciId): bool
     {
-        return self::pengelola($user);
+        if (self::pengelola($user)) {
+            return true;
+        }
+
+        $dosenId = $user?->dosen?->id_dosen;
+
+        return $dosenId !== null && MateriRinciBlok::query()
+            ->whereKey($materiRinciId)
+            ->whereHas(
+                'materi_blok.aturan_kegiatan_blok.blok.pengelola_blok',
+                fn ($query) => $query->where('dosen_id', $dosenId)
+            )
+            ->exists();
     }
 
     public static function bolehKelolaPertemuan(?User $user, int $pertemuanId): bool
     {
-        return self::pengelola($user) || self::dosenPengampu($user, $pertemuanId);
+        return self::pengelola($user)
+            || self::pengelolaBlok($user, $pertemuanId)
+            || self::dosenPengampu($user, $pertemuanId);
     }
 
     public static function bolehLihatPertemuan(?User $user, int $pertemuanId): bool
@@ -52,7 +67,7 @@ class AksesPertemuanBlok
     {
         return PertemuanBlok::query()
             ->whereKey($pertemuanId)
-            ->whereHas('aturan_kegiatan_blok.jenis_kegiatan', fn ($query) => $query->where('perlu_logbook', true))
+            ->whereHas('aturan_kegiatan_blok', fn ($query) => $query->where('perlu_logbook', true))
             ->exists();
     }
 
@@ -60,6 +75,7 @@ class AksesPertemuanBlok
     {
         return (int) ($user?->mahasiswa?->id_mahasiswa ?? 0) === $mahasiswaId
             && self::logbookAktif($pertemuanId)
+            && self::terkunci($pertemuanId)
             && self::mahasiswaAnggota($user, $pertemuanId);
     }
 
@@ -73,21 +89,15 @@ class AksesPertemuanBlok
             return true;
         }
 
-        $dosenId = $user?->dosen?->id_dosen;
-
-        return $dosenId !== null && PertemuanBlok::query()
-            ->whereKey($pertemuanId)
-            ->whereHas('blok', fn ($query) => $query
-                ->where('koordinator_id', $dosenId)
-                ->orWhere('asisten_koordinator_id', $dosenId))
-            ->exists();
+        return self::pengelolaBlok($user, $pertemuanId);
     }
 
     public static function bolehUnduhLogbook(?User $user, int $pertemuanId, int $mahasiswaId): bool
     {
         return self::logbookAktif($pertemuanId)
             && (self::bolehValidasiLogbook($user, $pertemuanId)
-                || self::bolehUnggahLogbook($user, $pertemuanId, $mahasiswaId));
+                || ((int) ($user?->mahasiswa?->id_mahasiswa ?? 0) === $mahasiswaId
+                    && self::mahasiswaAnggota($user, $pertemuanId)));
     }
 
     /**
@@ -121,9 +131,9 @@ class AksesPertemuanBlok
         return self::bolehKelolaPertemuan($user, $pertemuanId);
     }
 
-    public static function bolehBukaValidasi(?User $user): bool
+    public static function bolehBukaValidasi(?User $user, int $pertemuanId): bool
     {
-        return self::pengelola($user);
+        return self::pengelola($user) || self::pengelolaBlok($user, $pertemuanId);
     }
 
     /**
@@ -141,6 +151,16 @@ class AksesPertemuanBlok
         return PertemuanBlok::query()
             ->whereKey($pertemuanId)
             ->whereHas('dosen_pertemuan_blok', fn ($query) => $query->where('dosen_id', $dosenId))
+            ->exists();
+    }
+
+    private static function pengelolaBlok(?User $user, int $pertemuanId): bool
+    {
+        $dosenId = $user?->dosen?->id_dosen;
+
+        return $dosenId !== null && PertemuanBlok::query()
+            ->whereKey($pertemuanId)
+            ->whereHas('blok.pengelola_blok', fn ($query) => $query->where('dosen_id', $dosenId))
             ->exists();
     }
 

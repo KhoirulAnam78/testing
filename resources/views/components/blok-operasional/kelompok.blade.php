@@ -37,7 +37,7 @@ new class extends Component
     {
         $this->blok_id = (int) $blok_id;
 
-        $blok = Blok::select(['id', 'koordinator_id', 'asisten_koordinator_id'])->findOrFail($this->blok_id);
+        $blok = Blok::select('id')->findOrFail($this->blok_id);
 
         abort_unless($blok->dapatDikelolaOleh(auth()->user()), 403);
 
@@ -87,9 +87,9 @@ new class extends Component
         return AturanKegiatanBlok::query()
             ->where('blok_id', $this->blok_id)
             ->with('jenis_kegiatan:id,kode,nama')
-            ->withCount('kelompok_blok')
+            ->withCount(['kelompok_blok', 'materi_rinci_blok'])
             ->orderBy('urutan')
-            ->get(['id', 'blok_id', 'jenis_kegiatan_id', 'jumlah_pertemuan', 'durasi_menit', 'jumlah_mahasiswa_per_kelompok', 'urutan']);
+            ->get(['id', 'blok_id', 'jenis_kegiatan_id', 'durasi_menit', 'jumlah_mahasiswa_per_kelompok', 'urutan']);
     }
 
     public function resetForm(): void
@@ -481,7 +481,7 @@ new class extends Component
                 <div class="d-flex flex-wrap gap-2">
                     @foreach ($aturanList as $aturan)
                         <button type="button"
-                            class="btn btn-sm {{ (int) $aturan_kegiatan_blok_id === (int) $aturan->id ? 'btn-primary' : 'btn-outline-primary' }}"
+                            class="btn btn-sm {{ (int) $aturan_kegiatan_blok_id === (int) $aturan->id ? 'btn-primary' : 'btn-light' }}"
                             wire:click="pilihKegiatan('{{ $aturan->id }}')">
                             {{ $aturan->jenis_kegiatan?->nama }}
                             <span class="badge bg-light text-dark border ms-1">{{ $aturan->kelompok_blok_count }}</span>
@@ -490,7 +490,7 @@ new class extends Component
                 </div>
                 @if ($aturanAktif)
                     <div class="text-muted small mt-2">
-                        {{ $aturanAktif->jumlah_pertemuan }} pertemuan &times; {{ $aturanAktif->durasi_menit }} menit
+                        {{ $aturanAktif->materi_rinci_blok_count }} pertemuan per kelompok &times; {{ $aturanAktif->durasi_menit }} menit
                         @if ($aturanAktif->jumlah_mahasiswa_per_kelompok)
                             &middot; standar {{ $aturanAktif->jumlah_mahasiswa_per_kelompok }} mahasiswa per kelompok
                         @endif
@@ -549,7 +549,7 @@ new class extends Component
                     <div class="card-header d-flex justify-content-between align-items-center">
                         <h5 class="mb-0">{{ $edit_id ? 'Edit Kelompok' : 'Tambah Kelompok' }}</h5>
                         @if ($edit_id)
-                            <button type="button" class="btn btn-outline-secondary btn-sm" wire:click="resetForm">Batal</button>
+                            <button type="button" class="btn btn-secondary btn-sm" wire:click="resetForm">Batal</button>
                         @endif
                     </div>
                     <div class="card-body">

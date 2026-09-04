@@ -109,7 +109,7 @@ Route::middleware(['auth', 'route.permission'])->group(function () {
 
 });
 
-Route::view('profile', 'profile')
+Route::livewire('profile', 'pages::profile')
     ->middleware(['auth'])
     ->name('profile');
 

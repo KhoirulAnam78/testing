@@ -31,7 +31,7 @@
         :root {
             --ink: #12251d;
             --ink-soft: #3d5049;
-            --muted: #6c7c74;
+            --muted: #63726a;
             --green: #047857;
             --green-mid: #0f766e;
             --green-deep: #05392c;
@@ -74,7 +74,7 @@
             --siakad-surface: #ffffff;
             --siakad-soft: #f6faf8;
             --siakad-border: #dde7e2;
-            --siakad-muted: #6c7c74;
+            --siakad-muted: #63726a;
             --siakad-ink: #12251d;
 
             /* sidebar: the institutional band from the welcome and login pages */
@@ -110,7 +110,7 @@
             --vz-header-bg: #ffffff;
             --vz-header-border: #dde7e2;
             --vz-header-item-color: #3d5049;
-            --vz-header-item-sub-color: #6c7c74;
+            --vz-header-item-sub-color: #63726a;
             --vz-topbar-user-bg: #ffffff;
         }
 
@@ -480,17 +480,6 @@
             --vz-btn-active-border-color: #05392c;
             --vz-btn-disabled-bg: #7ba699;
             --vz-btn-disabled-border-color: #7ba699;
-            --vz-btn-focus-shadow-rgb: 4, 120, 87;
-        }
-
-        .btn-outline-primary {
-            --vz-btn-color: #047857;
-            --vz-btn-border-color: #c3d4cc;
-            --vz-btn-hover-bg: #047857;
-            --vz-btn-hover-border-color: #047857;
-            --vz-btn-hover-color: #fff;
-            --vz-btn-active-bg: #05392c;
-            --vz-btn-active-border-color: #05392c;
             --vz-btn-focus-shadow-rgb: 4, 120, 87;
         }
 

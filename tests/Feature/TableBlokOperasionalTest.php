@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Livewire\TableBlokOperasional;
 use App\Models\Blok;
 use App\Models\Dosen;
+use App\Models\PengelolaBlok;
 use App\Models\Prodi;
 use App\Models\Semester;
 use App\Models\User;
@@ -33,7 +34,7 @@ class TableBlokOperasionalTest extends TestCase
         $prodiB = Prodi::create(['kode' => 'PB', 'nama' => 'Prodi B']);
         $semester = Semester::firstOrCreate(
             ['nama' => 'ganjil', 'tahun' => 2026],
-            ['kode' => '2026-GANJIL']
+            ['kode' => '2026-GANJIL', 'is_aktif' => true]
         );
 
         Blok::create([
@@ -54,8 +55,11 @@ class TableBlokOperasionalTest extends TestCase
         Livewire::test(TableBlokOperasional::class)
             ->assertSee('Blok Ditampilkan')
             ->assertSee('Blok Disembunyikan')
+            ->assertSeeHtml('class="blok-card__header p-3"')
+            ->assertSee('--blok-accent: var(--vz-primary);', false)
             ->set('search', 'BLOK-A')
             ->assertSee('Blok Ditampilkan')
+            ->assertDontSee('BLOK-A')
             ->assertDontSee('Blok Disembunyikan')
             ->set('search', '')
             ->set('prodiId', (string) $prodiB->id_prodi)
@@ -64,12 +68,12 @@ class TableBlokOperasionalTest extends TestCase
             ->call('resetFilters')
             ->assertSet('search', '')
             ->assertSet('prodiId', '')
-            ->assertSet('semesterId', '')
+            ->assertSet('semesterId', (string) $semester->id_semester)
             ->assertSee('Blok Ditampilkan')
             ->assertSee('Blok Disembunyikan');
     }
 
-    public function test_dosen_hanya_melihat_blok_yang_dikoordinasikan(): void
+    public function test_kontributor_hanya_melihat_blok_yang_dikelola(): void
     {
         $user = User::factory()->create();
         $dosen = Dosen::create([
@@ -82,13 +86,17 @@ class TableBlokOperasionalTest extends TestCase
             ['kode' => '2026-GANJIL']
         );
 
-        Blok::create([
+        $blokKelola = Blok::create([
             'prodi_id' => $prodi->id_prodi,
             'semester_id' => $semester->id_semester,
-            'koordinator_id' => $dosen->id_dosen,
             'kode' => 'BLOK-KELOLA',
             'nama' => 'Blok Dapat Dikelola',
             'sks' => 4,
+        ]);
+        PengelolaBlok::create([
+            'blok_id' => $blokKelola->id,
+            'dosen_id' => $dosen->id_dosen,
+            'jabatan' => 'kontributor',
         ]);
         Blok::create([
             'prodi_id' => $prodi->id_prodi,

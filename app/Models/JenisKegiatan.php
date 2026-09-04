@@ -14,13 +14,6 @@ class JenisKegiatan extends Model
 
     protected $guarded = ['id'];
 
-    protected function casts(): array
-    {
-        return [
-            'pakai_cbt' => 'boolean',
-        ];
-    }
-
     public function aturan_kegiatan_blok(): HasMany
     {
         return $this->hasMany(AturanKegiatanBlok::class, 'jenis_kegiatan_id', 'id');

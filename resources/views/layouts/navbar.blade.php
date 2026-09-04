@@ -7,7 +7,7 @@ use Livewire\Component;
 
 new class extends Component {
     public $menu;
-    public bool $dapatKelolaDpna = false;
+    public bool $dapatKelolaBlok = false;
 
     public function mount(): void
     {
@@ -18,7 +18,7 @@ new class extends Component {
             ->orderBy('position')
             ->select('menus.*', 'b.name as nama_permission')
             ->get();
-        $this->dapatKelolaDpna = Blok::query()->dapatDikelolaOleh(auth()->user())->exists();
+        $this->dapatKelolaBlok = Blok::query()->dapatDikelolaOleh(auth()->user())->exists();
     }
 }; ?>
 
@@ -87,7 +87,7 @@ new class extends Component {
 
                 @if ($menu)
                     @foreach ($menu as $m)
-                        @if (auth()->user()->can($m->nama_permission) || ($m->name === 'Kelola Blok' && $dapatKelolaDpna))
+                        @if (auth()->user()->can($m->nama_permission) || ($m->name === 'Kelola Blok' && $dapatKelolaBlok))
                             @php
                                 $routeName = request()->route()?->getName();
                                 $childRoutes = $m->childs_main_permission->pluck('route')->filter();
@@ -113,7 +113,7 @@ new class extends Component {
                                     id="{{ $collapseId }}">
                                     <ul class="nav nav-sm flex-column">
                                         @foreach ($m->childs_main_permission as $i)
-                                            @if (auth()->user()->can($i->main_permission->name) || ($i->route === 'dpna-blok.index' && $dapatKelolaDpna))
+                                            @if (auth()->user()->can($i->main_permission->name) || (in_array($i->route, ['blok-operasional.index', 'dpna-blok.index'], true) && $dapatKelolaBlok))
                                                 @php
                                                     $childRoutePattern = Str::before($i->route, '.') . '.*';
                                                     $isActiveChild = Route::is($i->route) || Route::is($childRoutePattern);

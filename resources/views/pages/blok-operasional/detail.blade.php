@@ -18,7 +18,7 @@ new #[Layout('layouts.app')] class extends Component {
             abort(404, 'Enkripsi tidak valid !');
         }
 
-        $blok = Blok::select(['id', 'koordinator_id', 'asisten_koordinator_id'])->findOrFail($this->blok_id);
+        $blok = Blok::select('id')->findOrFail($this->blok_id);
 
         abort_unless($blok->dapatDikelolaOleh(auth()->user()), 403);
     }
@@ -42,6 +42,7 @@ new #[Layout('layouts.app')] class extends Component {
                 'semester:id_semester,nama,tahun,kode',
                 'koordinator:id_dosen,nama',
                 'asisten_koordinator:id_dosen,nama',
+                'pengelola_blok.dosen:id_dosen,nama',
             ])
             ->withCount([
                 'peserta_blok as peserta_count',
@@ -80,7 +81,7 @@ new #[Layout('layouts.app')] class extends Component {
     <div class="card">
         <div class="card-body">
             <div class="row g-3">
-                <div class="col-md-3">
+                <div class="col-md-2">
                     <div class="text-muted small">Blok</div>
                     <div class="fw-semibold">{{ $blok->kode }} - {{ $blok->nama }}</div>
                 </div>
@@ -92,11 +93,17 @@ new #[Layout('layouts.app')] class extends Component {
                     <div class="text-muted small">Asisten Koordinator</div>
                     <div class="fw-semibold">{{ $blok->asisten_koordinator?->nama ?: '-' }}</div>
                 </div>
+                <div class="col-md-2">
+                    <div class="text-muted small">Kontributor</div>
+                    <div class="fw-semibold">
+                        {{ $blok->pengelola_blok->where('jabatan', 'kontributor')->pluck('dosen.nama')->filter()->join(', ') ?: '-' }}
+                    </div>
+                </div>
                 <div class="col-md-1">
                     <div class="text-muted small">Prodi</div>
                     <div class="fw-semibold">{{ $blok->prodi?->nama ?: '-' }}</div>
                 </div>
-                <div class="col-md-2">
+                <div class="col-md-1">
                     <div class="text-muted small">Semester</div>
                     <div class="fw-semibold">{{ $blok->semester ? ucfirst($blok->semester->nama).' '.$blok->semester->tahun : '-' }}</div>
                 </div>
@@ -296,6 +303,7 @@ new #[Layout('layouts.app')] class extends Component {
             bind('mappingPertemuanModal', 'show-mapping-pertemuan-modal', 'hide-mapping-pertemuan-modal');
             bind('modulMateriModal', 'show-modul-materi-modal', 'hide-modul-materi-modal');
             bind('pelaksanaanModal', 'show-pelaksanaan-modal', 'hide-pelaksanaan-modal');
+            bind('logbookModal', 'show-logbook-modal', 'hide-logbook-modal');
         })();
     </script>
 @endpush

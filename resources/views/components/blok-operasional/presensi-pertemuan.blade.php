@@ -254,7 +254,7 @@ new class extends Component
         </div>
 
         @if ($bolehIsi)
-            <button type="button" class="btn btn-outline-secondary btn-sm" wire:click="semuaHadir">
+            <button type="button" class="btn btn-secondary btn-sm" wire:click="semuaHadir">
                 <i class="ri-check-double-line"></i> Tandai Semua Hadir
             </button>
         @endif
@@ -293,7 +293,7 @@ new class extends Component
                                         <div class="btn-group btn-group-sm" role="group">
                                             @foreach ($label as $kunci => $teks)
                                                 <button type="button"
-                                                    class="btn btn-sm {{ $statusAktif === $kunci ? 'btn-'.$warna[$kunci] : 'btn-outline-secondary' }}"
+                                                    class="btn btn-sm {{ $statusAktif === $kunci ? 'btn-'.$warna[$kunci] : 'btn-light' }}"
                                                     wire:click="setStatus('{{ $id }}', '{{ $kunci }}')">
                                                     {{ $teks }}
                                                 </button>

@@ -24,7 +24,7 @@ new class extends Component
     {
         $this->blok_id = (int) $blok_id;
 
-        $blok = Blok::select(['id', 'koordinator_id', 'asisten_koordinator_id'])->findOrFail($this->blok_id);
+        $blok = Blok::select('id')->findOrFail($this->blok_id);
 
         abort_unless($blok->dapatDikelolaOleh(auth()->user()), 403);
     }

@@ -1,6 +1,8 @@
 <?php
 
+use App\Models\Blok;
 use App\Models\PertemuanBlok;
+use Livewire\Attributes\Locked;
 use Livewire\Component;
 use Livewire\WithPagination;
 
@@ -8,11 +10,32 @@ new class extends Component
 {
     use WithPagination;
 
+    #[Locked]
     public int $blok_id;
+
     public string $kegiatan_id = '';
+
     public string $pertemuan_id = '';
+
     public string $kelompok_id = '';
+
     public string $status = '';
+
+    #[Locked]
+    public ?int $logbook_pertemuan_id = null;
+
+    public string $logbook_judul = '';
+
+    public string $logbook_konteks = '';
+
+    public function mount($blok_id): void
+    {
+        $this->blok_id = (int) $blok_id;
+
+        $blok = Blok::select('id')->findOrFail($this->blok_id);
+
+        abort_unless($blok->dapatDikelolaOleh(auth()->user()), 403);
+    }
 
     public function updated($property): void
     {
@@ -25,7 +48,7 @@ new class extends Component
     {
         return PertemuanBlok::query()
             ->where('blok_id', $this->blok_id)
-            ->whereHas('aturan_kegiatan_blok.jenis_kegiatan', fn ($query) => $query->where('perlu_logbook', true))
+            ->whereHas('aturan_kegiatan_blok', fn ($query) => $query->where('perlu_logbook', true))
             ->when($this->kegiatan_id !== '', fn ($query) => $query->whereHas(
                 'aturan_kegiatan_blok',
                 fn ($aturan) => $aturan->where('jenis_kegiatan_id', (int) $this->kegiatan_id)
@@ -48,11 +71,42 @@ new class extends Component
             ->orderBy('jam_mulai');
     }
 
+    public function bukaLogbook(string $id): void
+    {
+        $pertemuan = PertemuanBlok::query()
+            ->where('blok_id', $this->blok_id)
+            ->whereHas('aturan_kegiatan_blok', fn ($query) => $query->where('perlu_logbook', true))
+            ->with([
+                'aturan_kegiatan_blok.jenis_kegiatan:id,nama',
+                'kelompok_blok:id_kelompok_blok,kode,nama',
+                'materi_rinci_blok:id_materi_rinci_blok,judul,pertemuan_ke',
+            ])
+            ->findOrFail((int) $id);
+
+        $this->logbook_pertemuan_id = $pertemuan->id_pertemuan_blok;
+        $this->logbook_judul = $pertemuan->materi_rinci_blok?->judul ?: $pertemuan->topik ?: 'Pertemuan';
+        $this->logbook_konteks = implode(' · ', array_filter([
+            $pertemuan->aturan_kegiatan_blok?->jenis_kegiatan?->nama,
+            $pertemuan->materi_rinci_blok?->pertemuan_ke
+                ? 'Pertemuan '.$pertemuan->materi_rinci_blok->pertemuan_ke
+                : null,
+            $pertemuan->kelompok_blok?->kode,
+            $pertemuan->tanggal?->format('d/m/Y'),
+        ]));
+
+        $this->dispatch('show-logbook-modal');
+    }
+
+    public function tutupLogbook(): void
+    {
+        $this->reset(['logbook_pertemuan_id', 'logbook_judul', 'logbook_konteks']);
+    }
+
     public function options()
     {
         $query = PertemuanBlok::query()
             ->where('blok_id', $this->blok_id)
-            ->whereHas('aturan_kegiatan_blok.jenis_kegiatan', fn ($jenis) => $jenis->where('perlu_logbook', true));
+            ->whereHas('aturan_kegiatan_blok', fn ($aturan) => $aturan->where('perlu_logbook', true));
 
         return [
             'kegiatan' => (clone $query)->with('aturan_kegiatan_blok.jenis_kegiatan:id,nama')->get()
@@ -115,25 +169,86 @@ new class extends Component
                 </div>
             </div>
 
-            @forelse ($pertemuan as $item)
-                <div class="border rounded p-3 mb-3" wire:key="logbook-operasional-{{ $item->id_pertemuan_blok }}">
-                    <div class="fw-semibold">
-                        {{ $item->materi_rinci_blok?->judul ?: $item->topik ?: 'Pertemuan' }}
-                    </div>
-                    <div class="text-muted small mb-3">
-                        {{ $item->aturan_kegiatan_blok?->jenis_kegiatan?->nama }}
-                        &middot; {{ $item->kelompok_blok?->kode }}
-                        &middot; {{ $item->tanggal?->format('d/m/Y') ?: 'belum terjadwal' }}
-                    </div>
-                    <livewire:logbook-pertemuan
-                        :pertemuan_blok_id="$item->id_pertemuan_blok"
-                        :key="'logbook-operasional-detail-'.$item->id_pertemuan_blok" />
-                </div>
-            @empty
-                <div class="text-muted text-center py-4">Tidak ada pertemuan logbook sesuai filter.</div>
-            @endforelse
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Jadwal</th>
+                            <th>Kegiatan</th>
+                            <th>Pertemuan</th>
+                            <th>Kelompok</th>
+                            <th class="text-end">Aksi</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @forelse ($pertemuan as $item)
+                            <tr wire:key="logbook-operasional-{{ $item->id_pertemuan_blok }}">
+                                <td>
+                                    <div class="fw-semibold">{{ $item->tanggal?->format('d/m/Y') ?: 'Belum terjadwal' }}</div>
+                                    @if ($item->jam_mulai || $item->jam_selesai)
+                                        <div class="text-muted small">
+                                            {{ $item->jam_mulai ? substr($item->jam_mulai, 0, 5) : '' }}{{ $item->jam_selesai ? '–'.substr($item->jam_selesai, 0, 5) : '' }}
+                                        </div>
+                                    @endif
+                                </td>
+                                <td>{{ $item->aturan_kegiatan_blok?->jenis_kegiatan?->nama ?: '-' }}</td>
+                                <td>
+                                    @if ($item->materi_rinci_blok?->pertemuan_ke)
+                                        <span class="badge bg-light text-dark border mb-1">Pertemuan {{ $item->materi_rinci_blok->pertemuan_ke }}</span>
+                                    @endif
+                                    <div class="fw-semibold">{{ $item->materi_rinci_blok?->judul ?: $item->topik ?: 'Pertemuan' }}</div>
+                                </td>
+                                <td>
+                                    <div class="fw-semibold">{{ $item->kelompok_blok?->kode ?: 'Tanpa kelompok' }}</div>
+                                    <div class="text-muted small">{{ $item->kelompok_blok?->nama }}</div>
+                                </td>
+                                <td class="text-end">
+                                    <button type="button" class="btn btn-primary btn-sm"
+                                        wire:click="bukaLogbook('{{ $item->id_pertemuan_blok }}')">
+                                        <i class="ri-file-list-3-line"></i> Logbook
+                                    </button>
+                                </td>
+                            </tr>
+                        @empty
+                            <tr>
+                                <td colspan="5" class="text-center text-muted py-4">
+                                    Tidak ada pertemuan logbook sesuai filter.
+                                </td>
+                            </tr>
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
 
-            {{ $pertemuan->links() }}
+            <div class="mt-3">{{ $pertemuan->links() }}</div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="logbookModal" tabindex="-1" aria-hidden="true" wire:ignore.self>
+        <div class="modal-dialog modal-xl modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Logbook Pertemuan</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup" wire:click="tutupLogbook"></button>
+                </div>
+                <div class="modal-body">
+                    @if (! $logbook_pertemuan_id)
+                        <div class="text-muted">Pilih tombol Logbook pada salah satu pertemuan.</div>
+                    @else
+                        <div class="border rounded p-3 mb-3 bg-light">
+                            <div class="fw-semibold">{{ $logbook_judul }}</div>
+                            <div class="text-muted small">{{ $logbook_konteks }}</div>
+                        </div>
+
+                        <livewire:logbook-pertemuan
+                            :pertemuan_blok_id="$logbook_pertemuan_id"
+                            :key="'logbook-operasional-detail-'.$logbook_pertemuan_id" />
+                    @endif
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal" wire:click="tutupLogbook">Tutup</button>
+                </div>
+            </div>
         </div>
     </div>
 </div>

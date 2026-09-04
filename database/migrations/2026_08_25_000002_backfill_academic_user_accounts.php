@@ -34,7 +34,7 @@ return new class extends Migration
                         'name' => $dosen->nama,
                         'username' => $username,
                         'email' => $email,
-                        'password' => Hash::make($dosen->nidn ?: $dosen->nip ?: $username),
+                        'password' => Hash::make($username),
                         'created_at' => $now,
                         'updated_at' => $now,
                     ]);

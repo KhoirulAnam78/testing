@@ -47,7 +47,7 @@ new class extends Component
 
         return $this->pertemuan_blok_id
             ? AksesPertemuanBlok::bolehLihatPertemuan($user, $this->pertemuan_blok_id)
-            : AksesPertemuanBlok::bolehKelolaLampiranDefault($user);
+            : AksesPertemuanBlok::bolehKelolaLampiranDefault($user, $this->materi_rinci_blok_id);
     }
 
     public function bolehKelola(): bool
@@ -56,7 +56,7 @@ new class extends Component
 
         return $this->pertemuan_blok_id
             ? AksesPertemuanBlok::bolehKelolaPertemuan($user, $this->pertemuan_blok_id)
-            : AksesPertemuanBlok::bolehKelolaLampiranDefault($user);
+            : AksesPertemuanBlok::bolehKelolaLampiranDefault($user, $this->materi_rinci_blok_id);
     }
 
     /**

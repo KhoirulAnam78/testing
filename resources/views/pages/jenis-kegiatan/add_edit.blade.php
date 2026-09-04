@@ -2,22 +2,28 @@
 
 use App\Models\JenisKegiatan;
 use App\Models\KomponenPenilaian;
+use Illuminate\Contracts\Encryption\DecryptException;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
-use Livewire\Component;
 use Livewire\Attributes\Layout;
+use Livewire\Component;
 
-new #[Layout('layouts.app')] class extends Component {
+new #[Layout('layouts.app')] class extends Component
+{
     public $edit_id;
+
     public $kode;
+
     public $nama;
+
     public $jumlah_pertemuan_default = 1;
+
     public $durasi_menit_default = 100;
-    public bool $perlu_logbook = false;
-    public bool $pakai_cbt = false;
+
     public $deskripsi;
+
     public $status = 'aktif';
 
     /**
@@ -33,7 +39,7 @@ new #[Layout('layouts.app')] class extends Component {
         if ($id && $id !== 'add') {
             try {
                 $this->edit_id = Crypt::decrypt($id);
-            } catch (\Illuminate\Contracts\Encryption\DecryptException $e) {
+            } catch (DecryptException $e) {
                 abort(404, 'Enkripsi tidak valid !');
             }
 
@@ -49,8 +55,6 @@ new #[Layout('layouts.app')] class extends Component {
             $this->nama = $jenis->nama;
             $this->jumlah_pertemuan_default = $jenis->jumlah_pertemuan_default;
             $this->durasi_menit_default = $jenis->durasi_menit_default;
-            $this->perlu_logbook = (bool) $jenis->perlu_logbook;
-            $this->pakai_cbt = $jenis->pakai_cbt;
             $this->deskripsi = $jenis->deskripsi;
             $this->status = $jenis->status;
 
@@ -67,35 +71,6 @@ new #[Layout('layouts.app')] class extends Component {
                 ->values()
                 ->toArray();
         }
-    }
-
-    public function updatedPakaiCbt(bool $pakaiCbt): void
-    {
-        if (! $pakaiCbt) {
-            return;
-        }
-
-        $index = collect($this->standar)->search(
-            fn ($baris) => Str::lower(trim($baris['nama'] ?? '')) === 'nilai'
-        );
-
-        if ($index !== false) {
-            $this->standar[$index]['nilai_min'] = 1;
-            $this->standar[$index]['nilai_maks'] = 100;
-            $this->standar[$index]['status'] = 'aktif';
-
-            return;
-        }
-
-        $this->standar[] = [
-            'id' => null,
-            'nama' => 'Nilai',
-            'nilai_min' => 1,
-            'nilai_maks' => 100,
-            'urutan' => count($this->standar) + 1,
-            'status' => 'aktif',
-            'pernah_digunakan' => false,
-        ];
     }
 
     public function addStandar(): void
@@ -139,15 +114,11 @@ new #[Layout('layouts.app')] class extends Component {
 
     public function save()
     {
-        $this->updatedPakaiCbt($this->pakai_cbt);
-
         $payload = $this->validate([
             'kode' => ['required', 'string', 'max:255', Rule::unique('jenis_kegiatan', 'kode')->ignore($this->edit_id)],
             'nama' => ['required', 'string', 'max:255'],
             'jumlah_pertemuan_default' => ['required', 'integer', 'min:1', 'max:100'],
             'durasi_menit_default' => ['required', 'integer', 'min:1', 'max:1440'],
-            'perlu_logbook' => ['boolean'],
-            'pakai_cbt' => ['boolean'],
             'deskripsi' => ['nullable', 'string'],
             'status' => ['required', Rule::in(['aktif', 'nonaktif'])],
             'standar' => ['array'],
@@ -274,20 +245,6 @@ new #[Layout('layouts.app')] class extends Component {
                             <input type="number" class="form-control" wire:model="durasi_menit_default">
                             @error('durasi_menit_default') <div class="text-sm text-danger">{{ $message }}</div> @enderror
                         </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label d-block">Logbook</label>
-                            <div class="form-check form-switch pt-2">
-                                <input class="form-check-input" type="checkbox" wire:model="perlu_logbook" id="perluLogbook">
-                                <label class="form-check-label" for="perluLogbook">Wajibkan logbook PDF per pertemuan</label>
-                            </div>
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label d-block">CBT</label>
-                            <div class="form-check form-switch pt-2">
-                                <input class="form-check-input" type="checkbox" wire:model.live="pakai_cbt" id="pakaiCbt">
-                                <label class="form-check-label" for="pakaiCbt">Pakai CBT</label>
-                            </div>
-                        </div>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Deskripsi</label>
@@ -313,22 +270,12 @@ new #[Layout('layouts.app')] class extends Component {
                             Hanya komponen aktif yang disalin saat blok disusun. Komponen nonaktif tetap tersimpan dan bisa diaktifkan kembali.
                         </div>
                     </div>
-                    @if (! $pakai_cbt)
-                        <button type="button" class="btn btn-soft-primary btn-sm" wire:click="addStandar">
-                            <i class="ri-add-box-fill"></i> Tambah Komponen
-                        </button>
-                    @endif
+                    <button type="button" class="btn btn-soft-primary btn-sm" wire:click="addStandar">
+                        <i class="ri-add-box-fill"></i> Tambah Komponen
+                    </button>
                 </div>
                 <div class="card-body">
                     @error('standar') <div class="alert alert-danger py-2 mb-3 alert-dismissible fade show" role="alert"><button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Tutup"></button>{{ $message }}</div> @enderror
-
-                    @if ($pakai_cbt)
-                        <div class="alert alert-info py-2 alert-dismissible fade show" role="alert">
-                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Tutup"></button>
-                            <i class="ri-information-line"></i>
-                            Komponen penilaian Nilai dengan rentang 1–100 otomatis ditambahkan untuk CBT.
-                        </div>
-                    @endif
 
                     @if (empty($standar))
                         <div class="alert alert-light border mb-0 alert-dismissible fade show" role="alert">
