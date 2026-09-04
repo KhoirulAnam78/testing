@@ -22,3 +22,40 @@
 Homestead.json
 Homestead.yaml
 Thumbs.db
+
+# AI tooling & memory lokal (jangan pernah di-push)
+/AGENT.md
+/CLAUDE.md
+/.aider*
+/claude.md
+/.claude/
+/.opencode/
+/.kilocode/
+/.cursor/
+/.copilot/
+
+# HTTP cookie/curl debug
+/cookie.txt
+
+# Cache Laravel yang tidak tercakup .gitignore framework
+/storage/framework/views/
+/storage/framework/cache/
+/storage/framework/cache/data/
+/storage/framework/sessions/
+/storage/framework/testing/
+/storage/framework/powergrid-temp/
+/storage/framework/*.txt
+
+# Skrip debug ad-hoc di root
+/cek_blok.php
+/isi_blok.php
+/test_*.php
+
+# Dump & catatan kerja internal
+/starter_db.sql
+/task/*.md
+
+# Build Vite tetap dilacak (deploy statis); abaikan hanya baris ini bila pindah ke build-on-deploy.
+
+# Cache & service Laravel standar
+/bootstrap/cache/*.php
