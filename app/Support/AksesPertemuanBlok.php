@@ -128,7 +128,19 @@ class AksesPertemuanBlok
      */
     public static function bolehIsiNilai(?User $user, int $pertemuanId): bool
     {
-        return self::bolehKelolaPertemuan($user, $pertemuanId);
+        return self::bolehKelolaPertemuan($user, $pertemuanId)
+            && ! self::sumberNilaiCbt($pertemuanId);
+    }
+
+    public static function sumberNilaiCbt(int $pertemuanId): bool
+    {
+        return PertemuanBlok::query()
+            ->whereKey($pertemuanId)
+            ->whereHas(
+                'aturan_kegiatan_blok.jenis_kegiatan',
+                fn ($query) => $query->where('sumber_nilai', 'cbt')
+            )
+            ->exists();
     }
 
     public static function bolehBukaValidasi(?User $user, int $pertemuanId): bool

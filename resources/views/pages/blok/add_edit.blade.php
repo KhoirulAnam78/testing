@@ -12,6 +12,7 @@ use App\Models\MateriRinciBlok;
 use App\Models\PengelolaBlok;
 use App\Models\Prodi;
 use App\Models\Semester;
+use App\Support\PerhitunganSksBlok;
 use Illuminate\Contracts\Encryption\DecryptException;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Crypt;
@@ -48,7 +49,9 @@ new #[Layout('layouts.app')] class extends Component
 
     public $aturan = [];
 
-    public $selected_mata_kuliah_ids = [];
+    public $mata_kuliah_id;
+
+    public $mata_kuliah = [];
 
     public $prodi = [];
 
@@ -79,7 +82,8 @@ new #[Layout('layouts.app')] class extends Component
         $this->prodi = Prodi::where('status', 'aktif')->orderBy('nama')->get(['id_prodi', 'nama', 'kode']);
         $this->semester = Semester::orderByDesc('tahun')->orderBy('nama')->get(['id_semester', 'nama', 'tahun', 'kode']);
         $this->dosen = Dosen::where('status', 'aktif')->orderBy('nama')->get(['id_dosen', 'nidn', 'nama', 'gelar_depan', 'gelar_belakang']);
-        $this->jenis_kegiatan = JenisKegiatan::where('status', 'aktif')->orderBy('nama')->get(['id', 'kode', 'nama', 'durasi_menit_default']);
+        $this->jenis_kegiatan = JenisKegiatan::where('status', 'aktif')->orderBy('nama')->get(['id', 'kode', 'nama', 'jumlah_pertemuan_default', 'durasi_menit_default', 'bobot_sks_per_pertemuan', 'sumber_nilai']);
+        $this->mata_kuliah = MataKuliah::where('status', 'aktif')->orderBy('nama')->get(['id', 'prodi_id', 'kode', 'nama', 'sks']);
         $this->blok_copy_options = Blok::query()
             ->with(['prodi', 'semester'])
             ->orderByDesc('created_at')
@@ -118,16 +122,14 @@ new #[Layout('layouts.app')] class extends Component
             $this->tanggal_mulai = $blok->tanggal_mulai?->format('Y-m-d');
             $this->tanggal_selesai = $blok->tanggal_selesai?->format('Y-m-d');
             $this->deskripsi = $blok->deskripsi;
-            $this->selected_mata_kuliah_ids = $blok->mata_kuliah()
-                ->pluck('id')
-                ->map(fn ($id) => (string) $id)
-                ->toArray();
+            $this->mata_kuliah_id = $blok->mata_kuliah_id;
             $this->aturan = $blok->aturan_kegiatan_blok
                 ->sortBy('urutan')
                 ->map(fn ($item) => [
                     'id' => $item->id,
                     'jenis_kegiatan_id' => $item->jenis_kegiatan_id,
                     'durasi_menit' => $item->durasi_menit,
+                    'bobot_sks' => $item->bobot_sks,
                     'jumlah_mahasiswa_per_kelompok' => $item->jumlah_mahasiswa_per_kelompok,
                     'perlu_kelompok' => true,
                     'perlu_presensi' => (bool) $item->perlu_presensi,
@@ -254,6 +256,22 @@ new #[Layout('layouts.app')] class extends Component
             }
 
             $this->aturan[$index]['durasi_menit'] = $jenis->durasi_menit_default;
+            $jumlahPertemuan = collect($this->aturan[$index]['materi'] ?? [])
+                ->sum(fn (array $materi) => collect($materi['rinci'] ?? [])
+                    ->where('status', 'aktif')
+                    ->count()) ?: (int) $jenis->jumlah_pertemuan_default;
+            $this->aturan[$index]['bobot_sks'] = number_format(
+                (float) $jenis->bobot_sks_per_pertemuan * $jumlahPertemuan,
+                4,
+                '.',
+                ''
+            );
+
+            if ($jenis->sumber_nilai === 'cbt') {
+                $this->aturan[$index]['perlu_penilaian'] = true;
+
+                return;
+            }
 
             // Rubrik hanya diambil otomatis saat masih kosong, supaya penyesuaian yang sudah
             // dibuat pengelola tidak tertimpa ketika jenis kegiatan diganti bolak-balik.
@@ -265,6 +283,17 @@ new #[Layout('layouts.app')] class extends Component
         }
 
         if (str_ends_with($key, 'perlu_penilaian')) {
+            $jenis = $this->jenis_kegiatan->firstWhere(
+                'id',
+                (int) ($this->aturan[$index]['jenis_kegiatan_id'] ?? 0)
+            );
+
+            if ($jenis?->sumber_nilai === 'cbt') {
+                $this->aturan[$index]['perlu_penilaian'] = true;
+
+                return;
+            }
+
             // Isi standar hanya saat pertama kali penilaian dinyalakan. Rubrik yang pernah
             // disusun tetap dipakai dan tidak ditambah atau ditimpa oleh standar terbaru.
             if ((bool) $value && empty($this->aturan[$index]['komponen'])) {
@@ -302,6 +331,12 @@ new #[Layout('layouts.app')] class extends Component
         }
 
         $jenisId = (int) ($this->aturan[$aturanIndex]['jenis_kegiatan_id'] ?? 0);
+
+        if ($this->jenis_kegiatan->firstWhere('id', $jenisId)?->sumber_nilai === 'cbt') {
+            $this->aturan[$aturanIndex]['perlu_penilaian'] = true;
+
+            return;
+        }
 
         if (! $jenisId) {
             $this->addError("aturan.$aturanIndex.komponen", 'Pilih jenis kegiatan terlebih dahulu.');
@@ -355,7 +390,16 @@ new #[Layout('layouts.app')] class extends Component
 
     public function updatedProdiId(): void
     {
-        $this->selected_mata_kuliah_ids = [];
+        $this->mata_kuliah_id = null;
+        $this->sks = null;
+    }
+
+    public function updatedMataKuliahId(): void
+    {
+        $this->sks = $this->mata_kuliah
+            ->first(fn (MataKuliah $mataKuliah) => (int) $mataKuliah->id === (int) $this->mata_kuliah_id
+                && (int) $mataKuliah->prodi_id === (int) $this->prodi_id)
+            ?->sks;
     }
 
     public function setActiveTab(string $tab): void
@@ -412,6 +456,7 @@ new #[Layout('layouts.app')] class extends Component
             'id' => null,
             'jenis_kegiatan_id' => '',
             'durasi_menit' => 100,
+            'bobot_sks' => 0,
             'jumlah_mahasiswa_per_kelompok' => null,
             'perlu_kelompok' => true,
             'perlu_presensi' => true,
@@ -491,11 +536,17 @@ new #[Layout('layouts.app')] class extends Component
                 'id' => null,
                 'jenis_kegiatan_id' => $jenis->id,
                 'durasi_menit' => $jenis->durasi_menit_default,
+                'bobot_sks' => number_format(
+                    (float) $jenis->bobot_sks_per_pertemuan * (int) $jenis->jumlah_pertemuan_default,
+                    4,
+                    '.',
+                    ''
+                ),
                 'jumlah_mahasiswa_per_kelompok' => null,
                 'perlu_kelompok' => true,
                 'perlu_presensi' => true,
                 'perlu_logbook' => false,
-                'perlu_penilaian' => $standar->isNotEmpty(),
+                'perlu_penilaian' => $jenis->sumber_nilai === 'cbt' || $standar->isNotEmpty(),
                 'urutan' => count($this->aturan) + 1,
                 'komponen' => $standar
                     ->values()
@@ -539,7 +590,6 @@ new #[Layout('layouts.app')] class extends Component
             return;
         }
 
-        $this->sks = $source->sks;
         $this->deskripsi = $this->deskripsi ?: $source->deskripsi;
         $this->aturan = $source->aturan_kegiatan_blok
             ->sortBy('urutan')
@@ -547,6 +597,7 @@ new #[Layout('layouts.app')] class extends Component
                 'id' => null,
                 'jenis_kegiatan_id' => $item->jenis_kegiatan_id,
                 'durasi_menit' => $item->durasi_menit,
+                'bobot_sks' => $item->bobot_sks,
                 'jumlah_mahasiswa_per_kelompok' => $item->jumlah_mahasiswa_per_kelompok,
                 'perlu_kelompok' => true,
                 'perlu_presensi' => (bool) $item->perlu_presensi,
@@ -697,10 +748,53 @@ new #[Layout('layouts.app')] class extends Component
             $this->aturan[$aturanIndex]['perlu_kelompok'] = true;
             $this->aturan[$aturanIndex]['jumlah_mahasiswa_per_kelompok'] = null;
 
+            $jenis = $this->jenis_kegiatan->firstWhere(
+                'id',
+                (int) ($aturan['jenis_kegiatan_id'] ?? 0)
+            );
+            if ($jenis?->sumber_nilai === 'cbt') {
+                $this->aturan[$aturanIndex]['perlu_penilaian'] = true;
+            }
+
             if (! isset($aturan['komponen']) || ! is_array($aturan['komponen'])) {
                 $this->aturan[$aturanIndex]['komponen'] = [];
             }
 
+        }
+    }
+
+    private function sksKeSkala(mixed $nilai): int
+    {
+        return PerhitunganSksBlok::keSkala($nilai);
+    }
+
+    private function pastikanMataKuliah(): MataKuliah
+    {
+        $mataKuliah = MataKuliah::query()
+            ->whereKey($this->mata_kuliah_id)
+            ->where('prodi_id', $this->prodi_id)
+            ->where('status', 'aktif')
+            ->first();
+
+        if (! $mataKuliah) {
+            throw ValidationException::withMessages([
+                'mata_kuliah_id' => 'Mata kuliah harus aktif dan berada pada program studi yang sama dengan blok.',
+            ]);
+        }
+
+        $this->sks = $mataKuliah->sks;
+
+        return $mataKuliah;
+    }
+
+    private function pastikanTotalSks(array $aturan): void
+    {
+        $total = collect($aturan)->sum(fn (array $item) => $this->sksKeSkala($item['bobot_sks'] ?? 0));
+
+        if ($total !== $this->sksKeSkala($this->sks)) {
+            throw ValidationException::withMessages([
+                'aturan' => 'Total bobot SKS kegiatan harus sama dengan SKS mata kuliah ('.number_format((float) $this->sks, 4, ',', '.').' SKS).',
+            ]);
         }
     }
 
@@ -838,6 +932,10 @@ new #[Layout('layouts.app')] class extends Component
     private function tabForValidationErrors(array $keys): string
     {
         foreach ($keys as $key) {
+            if ($key === 'aturan') {
+                return 'kegiatan';
+            }
+
             if (str_starts_with($key, 'aturan.')) {
                 $segments = explode('.', $key);
 
@@ -954,11 +1052,10 @@ new #[Layout('layouts.app')] class extends Component
             ],
             'nama' => ['required', 'string', 'max:255'],
             'sks' => ['required', 'numeric', 'min:0.5', 'max:99.9'],
+            'mata_kuliah_id' => ['required', 'integer', 'exists:mata_kuliah,id'],
             'tanggal_mulai' => ['nullable', 'date'],
             'tanggal_selesai' => ['nullable', 'date', 'after_or_equal:tanggal_mulai'],
             'deskripsi' => ['nullable', 'string'],
-            'selected_mata_kuliah_ids' => ['array'],
-            'selected_mata_kuliah_ids.*' => ['integer', 'exists:mata_kuliah,id'],
         ], [
             'prodi_id.required' => 'Program studi wajib dipilih.',
             'semester_id.required' => 'Semester wajib dipilih.',
@@ -968,32 +1065,19 @@ new #[Layout('layouts.app')] class extends Component
             'selected_kontributor_ids.*.distinct' => 'Kontributor tidak boleh duplikat.',
             'selected_kontributor_ids.*.not_in' => 'Kontributor harus berbeda dari koordinator dan asisten koordinator.',
             'nama.required' => 'Nama blok wajib diisi.',
+            'mata_kuliah_id.required' => 'Mata kuliah wajib dipilih.',
             'tanggal_selesai.after_or_equal' => 'Tanggal selesai tidak boleh sebelum tanggal mulai.',
         ]);
 
-        $selectedIds = collect($payload['selected_mata_kuliah_ids'] ?? [])
-            ->map(fn ($id) => (int) $id)
-            ->unique()
-            ->values();
-
-        if ($selectedIds->isNotEmpty() && MataKuliah::query()
-            ->whereIn('id', $selectedIds)
-            ->where(fn ($query) => $query
-                ->where('prodi_id', '!=', $this->prodi_id)
-                ->orWhere('status', '!=', 'aktif'))
-            ->exists()) {
-            $this->addError('selected_mata_kuliah_ids', 'Mata kuliah harus aktif dan berada pada program studi yang sama dengan blok.');
-
-            throw ValidationException::withMessages($this->getErrorBag()->toArray());
-        }
-
-        DB::transaction(function () use ($payload, $selectedIds) {
+        DB::transaction(function () use ($payload) {
+            $mataKuliah = $this->pastikanMataKuliah();
             $blokPayload = collect($payload)->except([
                 'koordinator_id',
                 'asisten_koordinator_id',
                 'selected_kontributor_ids',
-                'selected_mata_kuliah_ids',
             ])->toArray();
+            $blokPayload['mata_kuliah_id'] = $mataKuliah->id;
+            $blokPayload['sks'] = $mataKuliah->sks;
             $blokPayload['status'] = 'aktif';
             if (! $this->edit_id) {
                 $blokPayload['kode'] = bin2hex(random_bytes(16));
@@ -1001,17 +1085,6 @@ new #[Layout('layouts.app')] class extends Component
             $blok = Blok::updateOrCreate(['id' => $this->edit_id], $blokPayload);
             $this->edit_id = $blok->id;
             $this->simpanPengelola($blok, $payload);
-
-            MataKuliah::where('blok_id', $blok->id)
-                ->when($selectedIds->isNotEmpty(), fn ($query) => $query->whereNotIn('id', $selectedIds))
-                ->update(['blok_id' => null]);
-
-            if ($selectedIds->isNotEmpty()) {
-                MataKuliah::whereIn('id', $selectedIds)
-                    ->where('prodi_id', $blok->prodi_id)
-                    ->where('status', 'aktif')
-                    ->update(['blok_id' => $blok->id]);
-            }
         });
     }
 
@@ -1045,6 +1118,7 @@ new #[Layout('layouts.app')] class extends Component
             'aturan.*.id' => ['nullable', 'integer'],
             'aturan.*.jenis_kegiatan_id' => ['required', 'exists:jenis_kegiatan,id'],
             'aturan.*.durasi_menit' => ['required', 'integer', 'min:1', 'max:1440'],
+            'aturan.*.bobot_sks' => ['required', 'numeric', 'min:0.0001', 'max:9999.9999', 'decimal:0,4'],
             'aturan.*.perlu_presensi' => ['boolean'],
             'aturan.*.perlu_logbook' => ['boolean'],
             'aturan.*.perlu_penilaian' => ['boolean'],
@@ -1052,12 +1126,15 @@ new #[Layout('layouts.app')] class extends Component
         ], [
             'aturan.*.jenis_kegiatan_id.required' => 'Jenis kegiatan wajib dipilih.',
             'aturan.*.durasi_menit.required' => 'Durasi menit wajib diisi.',
+            'aturan.*.bobot_sks.required' => 'Bobot SKS kegiatan wajib diisi.',
         ]);
 
         $jenisIds = collect($payload['aturan'])->pluck('jenis_kegiatan_id')->filter();
         if ($jenisIds->duplicates()->isNotEmpty()) {
             throw ValidationException::withMessages(['aturan' => 'Jenis kegiatan tidak boleh duplikat dalam satu blok.']);
         }
+
+        $this->pastikanTotalSks($payload['aturan']);
 
         if (! $this->lolosPengecekanNilaiTersimpan($this->aturan)) {
             throw ValidationException::withMessages($this->getErrorBag()->toArray());
@@ -1073,6 +1150,7 @@ new #[Layout('layouts.app')] class extends Component
                         'blok_id' => $this->edit_id,
                         'jenis_kegiatan_id' => $aturan['jenis_kegiatan_id'],
                         'durasi_menit' => $aturan['durasi_menit'],
+                        'bobot_sks' => $aturan['bobot_sks'],
                         'jumlah_mahasiswa_per_kelompok' => null,
                         'perlu_kelompok' => true,
                         'perlu_presensi' => (bool) $aturan['perlu_presensi'],
@@ -1229,7 +1307,10 @@ new #[Layout('layouts.app')] class extends Component
             if ($komponen->pluck('komponen_penilaian_id')->filter()->duplicates()->isNotEmpty()) {
                 throw ValidationException::withMessages(["aturan.$index.komponen" => 'Komponen penilaian tidak boleh duplikat dalam satu kegiatan.']);
             }
-            if (! empty($this->aturan[$index]['perlu_penilaian']) && $komponen->isEmpty()) {
+            $sumberCbt = $this->jenis_kegiatan
+                ->firstWhere('id', (int) ($this->aturan[$index]['jenis_kegiatan_id'] ?? 0))
+                ?->sumber_nilai === 'cbt';
+            if (! $sumberCbt && ! empty($this->aturan[$index]['perlu_penilaian']) && $komponen->isEmpty()) {
                 throw ValidationException::withMessages(["aturan.$index.komponen" => 'Kegiatan yang ditandai perlu penilaian harus punya minimal satu komponen.']);
             }
             foreach ($komponen as $komponenIndex => $baris) {
@@ -1271,15 +1352,15 @@ new #[Layout('layouts.app')] class extends Component
                 ],
                 'nama' => ['required', 'string', 'max:255'],
                 'sks' => ['required', 'numeric', 'min:0.5', 'max:99.9'],
+                'mata_kuliah_id' => ['required', 'integer', 'exists:mata_kuliah,id'],
                 'tanggal_mulai' => ['nullable', 'date'],
                 'tanggal_selesai' => ['nullable', 'date', 'after_or_equal:tanggal_mulai'],
                 'deskripsi' => ['nullable', 'string'],
-                'selected_mata_kuliah_ids' => ['array'],
-                'selected_mata_kuliah_ids.*' => ['integer', 'exists:mata_kuliah,id'],
                 'aturan' => ['required', 'array', 'min:1'],
                 'aturan.*.id' => ['nullable', 'integer'],
                 'aturan.*.jenis_kegiatan_id' => ['required', 'exists:jenis_kegiatan,id'],
                 'aturan.*.durasi_menit' => ['required', 'integer', 'min:1', 'max:1440'],
+                'aturan.*.bobot_sks' => ['required', 'numeric', 'min:0.0001', 'max:9999.9999', 'decimal:0,4'],
                 'aturan.*.perlu_kelompok' => ['boolean'],
                 'aturan.*.perlu_presensi' => ['boolean'],
                 'aturan.*.perlu_logbook' => ['boolean'],
@@ -1325,11 +1406,12 @@ new #[Layout('layouts.app')] class extends Component
                 'selected_kontributor_ids.*.exists' => 'Kontributor tidak valid.',
                 'nama.required' => 'Nama blok wajib diisi.',
                 'sks.required' => 'SKS wajib diisi.',
+                'mata_kuliah_id.required' => 'Mata kuliah wajib dipilih.',
                 'tanggal_selesai.after_or_equal' => 'Tanggal selesai tidak boleh sebelum tanggal mulai.',
-                'selected_mata_kuliah_ids.*.exists' => 'Mata kuliah yang dipilih tidak valid.',
                 'aturan.required' => 'Aturan kegiatan blok wajib diisi.',
                 'aturan.*.jenis_kegiatan_id.required' => 'Jenis kegiatan wajib dipilih.',
                 'aturan.*.durasi_menit.required' => 'Durasi menit wajib diisi.',
+                'aturan.*.bobot_sks.required' => 'Bobot SKS kegiatan wajib diisi.',
                 'aturan.*.materi.required' => 'Materi pokok wajib diisi pada setiap kegiatan blok.',
                 'aturan.*.materi.*.judul.required' => 'Judul pokok materi wajib diisi.',
                 'aturan.*.komponen.*.komponen_penilaian_id.required' => 'Komponen penilaian wajib tersedia.',
@@ -1357,6 +1439,15 @@ new #[Layout('layouts.app')] class extends Component
             return;
         }
 
+        try {
+            $this->pastikanMataKuliah();
+            $this->pastikanTotalSks($payload['aturan']);
+        } catch (ValidationException $exception) {
+            $this->active_tab = $this->tabForValidationErrors($exception->validator->errors()->keys());
+
+            throw $exception;
+        }
+
         foreach ($payload['aturan'] as $aturanIndex => $aturan) {
             $komponen = collect($aturan['komponen'] ?? []);
 
@@ -1378,7 +1469,10 @@ new #[Layout('layouts.app')] class extends Component
                 }
             }
 
-            if (! empty($aturan['perlu_penilaian']) && $komponen->isEmpty()) {
+            $sumberCbt = $this->jenis_kegiatan
+                ->firstWhere('id', (int) ($aturan['jenis_kegiatan_id'] ?? 0))
+                ?->sumber_nilai === 'cbt';
+            if (! $sumberCbt && ! empty($aturan['perlu_penilaian']) && $komponen->isEmpty()) {
                 $this->failOnPenilaianTab($aturanIndex, "aturan.$aturanIndex.komponen", 'Kegiatan yang ditandai perlu penilaian harus punya minimal satu komponen.');
 
                 return;
@@ -1387,28 +1481,6 @@ new #[Layout('layouts.app')] class extends Component
 
         if (! $this->lolosPengecekanNilaiTersimpan($payload['aturan'])) {
             return;
-        }
-
-        $selectedMataKuliahIds = collect($payload['selected_mata_kuliah_ids'] ?? [])
-            ->map(fn ($id) => (int) $id)
-            ->unique()
-            ->values();
-
-        if ($selectedMataKuliahIds->isNotEmpty()) {
-            $invalidMataKuliah = MataKuliah::query()
-                ->whereIn('id', $selectedMataKuliahIds)
-                ->where(function ($query) {
-                    $query->where('prodi_id', '!=', $this->prodi_id)
-                        ->orWhere('status', '!=', 'aktif');
-                })
-                ->exists();
-
-            if ($invalidMataKuliah) {
-                $this->active_tab = 'informasi';
-                $this->addError('selected_mata_kuliah_ids', 'Mata kuliah harus aktif dan berada pada program studi yang sama dengan blok.');
-
-                return;
-            }
         }
 
         $tanggalMulaiBlok = $payload['tanggal_mulai'] ?? null;
@@ -1452,18 +1524,16 @@ new #[Layout('layouts.app')] class extends Component
         }
 
         DB::transaction(function () use ($payload) {
-            $selectedMataKuliahIds = collect($payload['selected_mata_kuliah_ids'] ?? [])
-                ->map(fn ($id) => (int) $id)
-                ->unique()
-                ->values()
-                ->all();
+            $mataKuliah = $this->pastikanMataKuliah();
+            $this->pastikanTotalSks($payload['aturan']);
             $blokPayload = collect($payload)->except([
                 'aturan',
                 'koordinator_id',
                 'asisten_koordinator_id',
                 'selected_kontributor_ids',
-                'selected_mata_kuliah_ids',
             ])->toArray();
+            $blokPayload['mata_kuliah_id'] = $mataKuliah->id;
+            $blokPayload['sks'] = $mataKuliah->sks;
 
             if (! $this->edit_id) {
                 $blokPayload['status'] = 'aktif';
@@ -1474,22 +1544,12 @@ new #[Layout('layouts.app')] class extends Component
             $savedIds = [];
             $this->simpanPengelola($blok, $payload);
 
-            MataKuliah::where('blok_id', $blok->id)
-                ->when(! empty($selectedMataKuliahIds), fn ($query) => $query->whereNotIn('id', $selectedMataKuliahIds))
-                ->update(['blok_id' => null]);
-
-            if (! empty($selectedMataKuliahIds)) {
-                MataKuliah::whereIn('id', $selectedMataKuliahIds)
-                    ->where('prodi_id', $blok->prodi_id)
-                    ->where('status', 'aktif')
-                    ->update(['blok_id' => $blok->id]);
-            }
-
             foreach ($payload['aturan'] as $index => $aturan) {
                 $aturanPayload = [
                     'blok_id' => $blok->id,
                     'jenis_kegiatan_id' => $aturan['jenis_kegiatan_id'],
                     'durasi_menit' => $aturan['durasi_menit'],
+                    'bobot_sks' => $aturan['bobot_sks'],
                     'jumlah_mahasiswa_per_kelompok' => null,
                     'perlu_kelompok' => true,
                     'perlu_presensi' => (bool) $aturan['perlu_presensi'],
@@ -1601,6 +1661,7 @@ new #[Layout('layouts.app')] class extends Component
         $totalPertemuan = collect($aturan)->sum(fn ($item) => collect($item['materi'] ?? [])->sum(fn ($materi) => collect($materi['rinci'] ?? [])->sum(fn ($rinci) => (int) ($rinci['jumlah_sesi'] ?? 1))));
         $totalRinciTanpaTanggal = collect($aturan)->sum(fn ($item) => collect($item['materi'] ?? [])
             ->sum(fn ($materi) => collect($materi['rinci'] ?? [])->filter(fn ($rinci) => empty($rinci['tanggal_rencana']))->count()));
+        $totalBobotSks = collect($aturan)->sum(fn ($item) => (float) ($item['bobot_sks'] ?? 0));
         $activeAturan = $aturan[$active_aturan_index] ?? null;
         $activeJenis = $activeAturan ? $jenis_kegiatan->firstWhere('id', (int) ($activeAturan['jenis_kegiatan_id'] ?? 0)) : null;
     @endphp
@@ -1793,26 +1854,25 @@ new #[Layout('layouts.app')] class extends Component
                             </div>
                             <div class="col-xl-4">
                                 <div class="border rounded p-3 h-100">
-                                    @error('selected_mata_kuliah_ids') <div class="alert alert-danger py-2 alert-dismissible fade show" role="alert"><button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Tutup"></button>{{ $message }}</div> @enderror
+                                    @error('mata_kuliah_id') <div class="alert alert-danger py-2 alert-dismissible fade show" role="alert"><button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Tutup"></button>{{ $message }}</div> @enderror
 
                                     @if (empty($prodi_id))
                                         <div class="alert alert-info mb-0 alert-dismissible fade show" role="alert">
                                             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Tutup"></button>
                                             Pilih program studi terlebih dahulu untuk menampilkan mata kuliah.</div>
                                     @else
-                                        <livewire:dropdown.multi-select-search
-                                            :query="'App\Models\MataKuliah'"
-                                            :wire_model="'selected_mata_kuliah_ids'"
-                                            :label="'Mata Kuliah yang Memakai Blok'"
-                                            :colSearch="'kode'"
-                                            :colSubtitle="'nama'"
-                                            :colValue="'id'"
-                                            :selected="$selected_mata_kuliah_ids"
-                                            :conditions="'status = \'aktif\' and prodi_id = '.(int) $prodi_id"
-                                            :currentValue="$edit_id"
-                                            :limit="10"
-                                            :key="'mata-kuliah-blok-'.$prodi_id.'-'.$edit_id"
-                                        />
+                                        <label class="form-label">Mata Kuliah</label>
+                                        <select class="form-select" wire:model.live="mata_kuliah_id">
+                                            <option value="">Pilih mata kuliah</option>
+                                            @foreach ($mata_kuliah->where('prodi_id', (int) $prodi_id) as $item)
+                                                <option value="{{ $item->id }}">{{ $item->kode }} - {{ $item->nama }} ({{ number_format((float) $item->sks, 1, ',', '.') }} SKS)</option>
+                                            @endforeach
+                                        </select>
+                                        <div class="mt-3">
+                                            <label class="form-label">SKS Mata Kuliah</label>
+                                            <input type="text" class="form-control" value="{{ $sks ? number_format((float) $sks, 1, ',', '.') : '-' }}" readonly>
+                                            <div class="form-text">SKS blok otomatis mengikuti mata kuliah.</div>
+                                        </div>
                                     @endif
                                 </div>
                             </div>
@@ -1820,8 +1880,10 @@ new #[Layout('layouts.app')] class extends Component
                     @endif
 
                     @if ($active_tab === 'kegiatan')
-                        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+                        <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
                             <div>
+                                <h5 class="mb-1">Daftar Kegiatan</h5>
+                                <p class="text-muted mb-0">Total bobot kegiatan {{ number_format($totalBobotSks, 4, ',', '.') }} dari {{ number_format((float) $sks, 4, ',', '.') }} SKS mata kuliah.</p>
                                 @error('aturan') <div class="alert alert-danger py-2 mb-0 alert-dismissible fade show" role="alert"><button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Tutup"></button>{{ $message }}</div> @enderror
                             </div>
                             <button type="button" class="btn btn-primary btn-sm" wire:click="applyTemplateStandar">
@@ -1829,97 +1891,119 @@ new #[Layout('layouts.app')] class extends Component
                             </button>
                         </div>
 
-                        @foreach ($aturan as $index => $item)
-                            @php
-                                $jenisTerpilih = $jenis_kegiatan->firstWhere('id', (int) ($item['jenis_kegiatan_id'] ?? 0));
-                                $materiCount = count($item['materi'] ?? []);
-                                $rinciCount = collect($item['materi'] ?? [])->sum(fn ($materi) => count($materi['rinci'] ?? []));
-                            @endphp
-                            <div class="card border shadow-sm mb-3 aturan-card" wire:key="aturan-config-{{ $index }}">
-                                <div class="card-header bg-light-subtle border-bottom">
-                                    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
-                                        <div class="d-flex flex-wrap align-items-center gap-2">
-                                            <span class="badge bg-primary rounded-pill px-2">#{{ $index + 1 }}</span>
-                                            <div class="d-flex flex-column">
-                                                <span class="text-uppercase small text-muted fw-semibold lh-1">Kegiatan</span>
-                                                <span class="fw-semibold fs-15">{{ $jenisTerpilih ? $jenisTerpilih->nama : 'Kegiatan belum dipilih' }}</span>
-                                            </div>
-                                            <span class="badge bg-primary-subtle text-primary">{{ $materiCount }} materi</span>
-                                            <span class="badge bg-secondary-subtle text-secondary">{{ $rinciCount }} rincian</span>
-                                            <span class="badge bg-success-subtle text-success">Kelompok belajar</span>
-                                        </div>
-                                        <button type="button" class="btn btn-danger btn-sm" wire:click="removeAturan({{ $index }})" @disabled(count($aturan) <= 1)>
-                                            <i class="ri-delete-bin-line"></i> Hapus
-                                        </button>
-                                    </div>
-                                </div>
-                                <div class="card-body">
-                                    <div class="row g-3">
-                                        <div class="col-lg-5 mb-3">
-                                            <label class="form-label">Jenis Kegiatan</label>
-                                            <select class="form-select" wire:model.live="aturan.{{ $index }}.jenis_kegiatan_id">
-                                                <option value="">Pilih jenis kegiatan</option>
-                                                @foreach ($jenis_kegiatan as $jenis)
-                                                    <option
-                                                        value="{{ $jenis->id }}"
-                                                        @disabled(collect($aturan)->except($index)->pluck('jenis_kegiatan_id')->contains(fn ($id) => (int) $id === (int) $jenis->id))
-                                                    >{{ $jenis->kode }} - {{ $jenis->nama }}</option>
-                                                @endforeach
-                                            </select>
-                                            @error("aturan.$index.jenis_kegiatan_id") <div class="text-sm text-danger">{{ $message }}</div> @enderror
-                                        </div>
-                                        <div class="col-md-6 col-lg-3 mb-3">
-                                            <label class="form-label">Durasi (Menit)</label>
-                                            <input type="number" class="form-control" wire:model.live="aturan.{{ $index }}.durasi_menit">
-                                            @error("aturan.$index.durasi_menit") <div class="text-sm text-danger">{{ $message }}</div> @enderror
-                                        </div>
-                                        <div class="col-md-6 col-lg-2 mb-3">
-                                            <label class="form-label">Urutan</label>
-                                            <input type="number" class="form-control" wire:model="aturan.{{ $index }}.urutan">
-                                            @error("aturan.$index.urutan") <div class="text-sm text-danger">{{ $message }}</div> @enderror
-                                        </div>
-                                    </div>
-                                    <hr class="my-3">
-                                    <div class="row g-3 align-items-center">
-                                        <div class="col-lg-7">
-                                            <span class="text-uppercase small text-muted fw-semibold d-block mb-2">Pengaturan Kegiatan</span>
-                                            <div class="d-flex flex-wrap gap-4">
-                                                <div class="form-check form-switch">
+                        <div class="table-responsive border rounded mb-3">
+                            <table class="table table-bordered align-middle mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th scope="col" class="text-center" style="width: 50px;">No.</th>
+                                        <th scope="col" style="min-width: 260px;">Jenis Kegiatan</th>
+                                        <th scope="col" style="min-width: 130px;">Durasi (Menit)</th>
+                                        <th scope="col" style="min-width: 140px;">Bobot SKS</th>
+                                        <th scope="col" style="min-width: 100px;">Urutan</th>
+                                        <th scope="col" style="min-width: 150px;">Fitur</th>
+                                        <th scope="col" style="min-width: 190px;">Pengisian</th>
+                                        <th scope="col" class="text-center" style="width: 70px;">Aksi</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach ($aturan as $index => $item)
+                                        @php
+                                            $materiCount = count($item['materi'] ?? []);
+                                            $rinciCount = collect($item['materi'] ?? [])->sum(fn ($materi) => count($materi['rinci'] ?? []));
+                                        @endphp
+                                        <tr wire:key="aturan-config-{{ $index }}">
+                                            <th scope="row" class="text-center">{{ $index + 1 }}</th>
+                                            <td>
+                                                <select class="form-select" wire:model.live="aturan.{{ $index }}.jenis_kegiatan_id" aria-label="Jenis kegiatan {{ $index + 1 }}">
+                                                    <option value="">Pilih jenis kegiatan</option>
+                                                    @foreach ($jenis_kegiatan as $jenis)
+                                                        <option
+                                                            value="{{ $jenis->id }}"
+                                                            @disabled(collect($aturan)->except($index)->pluck('jenis_kegiatan_id')->contains(fn ($id) => (int) $id === (int) $jenis->id))
+                                                        >{{ $jenis->kode }} - {{ $jenis->nama }}</option>
+                                                    @endforeach
+                                                </select>
+                                                @error("aturan.$index.jenis_kegiatan_id") <div class="text-sm text-danger">{{ $message }}</div> @enderror
+                                                <div class="d-flex flex-wrap gap-1 mt-2">
+                                                    <span class="badge bg-primary-subtle text-primary">{{ $materiCount }} materi</span>
+                                                    <span class="badge bg-secondary-subtle text-secondary">{{ $rinciCount }} rincian</span>
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <input type="number" class="form-control" wire:model.live="aturan.{{ $index }}.durasi_menit" aria-label="Durasi kegiatan {{ $index + 1 }}">
+                                                @error("aturan.$index.durasi_menit") <div class="text-sm text-danger">{{ $message }}</div> @enderror
+                                            </td>
+                                            <td>
+                                                <input type="number" min="0.0001" max="9999.9999" step="0.0001" class="form-control" wire:model.live="aturan.{{ $index }}.bobot_sks" aria-label="Bobot SKS kegiatan {{ $index + 1 }}">
+                                                @error("aturan.$index.bobot_sks") <div class="text-sm text-danger">{{ $message }}</div> @enderror
+                                            </td>
+                                            <td>
+                                                <input type="number" class="form-control" wire:model="aturan.{{ $index }}.urutan" aria-label="Urutan kegiatan {{ $index + 1 }}">
+                                                @error("aturan.$index.urutan") <div class="text-sm text-danger">{{ $message }}</div> @enderror
+                                            </td>
+                                            <td>
+                                                <div class="form-check form-switch mb-2">
                                                     <input class="form-check-input" type="checkbox" role="switch" id="perlu_presensi_{{ $index }}" wire:model="aturan.{{ $index }}.perlu_presensi">
                                                     <label class="form-check-label" for="perlu_presensi_{{ $index }}">Presensi</label>
                                                 </div>
-                                                <div class="form-check form-switch">
+                                                <div class="form-check form-switch mb-2">
                                                     <input class="form-check-input" type="checkbox" role="switch" id="perlu_logbook_{{ $index }}" wire:model="aturan.{{ $index }}.perlu_logbook">
                                                     <label class="form-check-label" for="perlu_logbook_{{ $index }}">Logbook</label>
                                                 </div>
                                                 <div class="form-check form-switch">
                                                     <input class="form-check-input" type="checkbox" role="switch" id="perlu_penilaian_{{ $index }}" wire:model.live="aturan.{{ $index }}.perlu_penilaian">
-                                                    <label class="form-check-label" for="perlu_penilaian_{{ $index }}">
-                                                        Penilaian
-                                                        @if (! empty($item['komponen']))
-                                                            <span class="badge bg-light text-dark border">{{ count($item['komponen']) }} komponen</span>
-                                                        @endif
-                                                    </label>
+                                                    <label class="form-check-label" for="perlu_penilaian_{{ $index }}">Penilaian</label>
+                                                    @if (! empty($item['komponen']))
+                                                        <span class="badge bg-light text-dark border">{{ count($item['komponen']) }}</span>
+                                                    @endif
                                                 </div>
-                                            </div>
-                                        </div>
-                                        <div class="col-lg-5">
-                                            <span class="text-uppercase small text-muted fw-semibold d-block mb-2">Aksi Cepat</span>
-                                            <div class="d-flex flex-wrap gap-2">
-                                                <button type="button" class="btn btn-soft-info btn-sm" wire:click="setActiveAturan({{ $index }})">
-                                                    <i class="ri-book-open-line"></i> Isi Materi
-                                                </button>
-                                                <button type="button" class="btn btn-soft-secondary btn-sm" wire:click="setActivePenilaian({{ $index }})">
-                                                    <i class="ri-graduation-cap-line"></i> Isi Penilaian
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        @endforeach
+                                            </td>
+                                            <td>
+                                                <div class="d-flex flex-wrap gap-2">
+                                                    <button type="button" class="btn btn-soft-info btn-sm" wire:click="setActiveAturan({{ $index }})">
+                                                        <i class="ri-book-open-line"></i> Materi
+                                                    </button>
+                                                    <button type="button" class="btn btn-soft-secondary btn-sm" wire:click="setActivePenilaian({{ $index }})">
+                                                        <i class="ri-graduation-cap-line"></i> Penilaian
+                                                    </button>
+                                                </div>
+                                            </td>
+                                            <td class="text-center">
+                                                @if (count($aturan) <= 1)
+                                                    <span class="text-muted" title="Minimal satu kegiatan wajib tersedia"><i class="ri-information-line"></i></span>
+                                                @else
+                                                    <button type="button" class="btn btn-outline-danger btn-sm" wire:click="removeAturan({{ $index }})" aria-label="Hapus kegiatan {{ $index + 1 }}">
+                                                        <i class="ri-delete-bin-line"></i>
+                                                    </button>
+                                                @endif
+                                            </td>
+                                        </tr>
+                                    @endforeach
+                                </tbody>
+                                <tfoot class="table-light">
+                                    <tr>
+                                        <th colspan="3" class="text-end">Akumulasi Bobot SKS</th>
+                                        <th>
+                                            <span class="fs-5">{{ number_format($totalBobotSks, 4, ',', '.') }}</span>
+                                            <div class="text-muted small">dari {{ number_format((float) $sks, 4, ',', '.') }} SKS</div>
+                                        </th>
+                                        <th colspan="4">
+                                            @if (abs($totalBobotSks - (float) $sks) < 0.00005)
+                                                <span class="badge bg-success"><i class="ri-checkbox-circle-line"></i> Bobot sesuai</span>
+                                            @else
+                                                <span class="badge bg-danger"><i class="ri-error-warning-line"></i> Selisih {{ number_format(abs($totalBobotSks - (float) $sks), 4, ',', '.') }} SKS</span>
+                                            @endif
+                                        </th>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
 
-                        <div class="d-flex justify-content-end">
+                        <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 border rounded bg-light p-3">
+                            <div>
+                                <div class="fw-semibold">Butuh jenis kegiatan lain?</div>
+                                <div class="text-muted small">Tambahkan baris baru dan atur secara terpisah.</div>
+                            </div>
                             <button type="button" class="btn btn-primary btn-sm" wire:click="addAturan">
                                 <i class="ri-add-box-fill"></i> Tambah Kegiatan
                             </button>
@@ -2095,7 +2179,7 @@ new #[Layout('layouts.app')] class extends Component
                                         <button type="button" class="list-group-item list-group-item-action {{ $active_aturan_index === $index ? 'active' : '' }}" wire:click="setActivePenilaian({{ $index }})">
                                             <div class="fw-semibold">{{ $jenisTerpilih ? $jenisTerpilih->nama : 'Kegiatan belum dipilih' }}</div>
                                             <small>
-                                                {{ $komponenCount }} komponen
+                                                {{ $jenisTerpilih?->sumber_nilai === 'cbt' ? 'CBT eksternal' : $komponenCount.' komponen' }}
                                                 {{ empty($item['perlu_penilaian']) ? '- tidak dinilai' : '' }}
                                             </small>
                                         </button>
@@ -2118,28 +2202,36 @@ new #[Layout('layouts.app')] class extends Component
                                         <div>
                                             <h5 class="mb-1">{{ $activeJenis ? $activeJenis->nama : 'Kegiatan belum dipilih' }}</h5>
                                             <div class="text-muted small">
-                                                Komponen yang dinilai dosen pada setiap pertemuan kegiatan ini.
+                                                {{ $activeJenis?->sumber_nilai === 'cbt' ? 'Nilai kegiatan diambil dari aplikasi CBT pada tahap integrasi berikutnya.' : 'Komponen yang dinilai dosen pada setiap pertemuan kegiatan ini.' }}
                                             </div>
                                         </div>
-                                        <button type="button" class="btn btn-secondary btn-sm" wire:click="ambilStandarPenilaian({{ $active_aturan_index }})">
-                                            <i class="ri-download-2-line"></i> Ambil dari Standar
-                                        </button>
+                                        @if ($activeJenis?->sumber_nilai !== 'cbt')
+                                            <button type="button" class="btn btn-secondary btn-sm" wire:click="ambilStandarPenilaian({{ $active_aturan_index }})">
+                                                <i class="ri-download-2-line"></i> Ambil dari Standar
+                                            </button>
+                                        @endif
                                     </div>
 
-                                    <div class="form-check form-switch mb-3">
-                                        <input class="form-check-input" type="checkbox" role="switch"
-                                            id="perlu_penilaian_tab_{{ $active_aturan_index }}"
-                                            wire:model.live="aturan.{{ $active_aturan_index }}.perlu_penilaian">
-                                        <label class="form-check-label" for="perlu_penilaian_tab_{{ $active_aturan_index }}">
-                                            Kegiatan ini dinilai
-                                        </label>
-                                    </div>
+                                    @if ($activeJenis?->sumber_nilai === 'cbt')
+                                        <div class="alert alert-info mb-0">
+                                            <i class="ri-computer-line"></i>
+                                            Sumber CBT tidak memakai rubrik atau input nilai manual. Kegiatan otomatis ditandai dinilai.
+                                        </div>
+                                    @else
+                                        <div class="form-check form-switch mb-3">
+                                            <input class="form-check-input" type="checkbox" role="switch"
+                                                id="perlu_penilaian_tab_{{ $active_aturan_index }}"
+                                                wire:model.live="aturan.{{ $active_aturan_index }}.perlu_penilaian">
+                                            <label class="form-check-label" for="perlu_penilaian_tab_{{ $active_aturan_index }}">
+                                                Kegiatan ini dinilai
+                                            </label>
+                                        </div>
 
-                                    @error("aturan.$active_aturan_index.komponen")
-                                        <div class="alert alert-danger py-2 alert-dismissible fade show" role="alert">
-                                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Tutup"></button>
-                                            {{ $message }}</div>
-                                    @enderror
+                                        @error("aturan.$active_aturan_index.komponen")
+                                            <div class="alert alert-danger py-2 alert-dismissible fade show" role="alert">
+                                                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Tutup"></button>
+                                                {{ $message }}</div>
+                                        @enderror
 
                                     @if (empty($komponenAktif))
                                         <div class="alert alert-light border alert-dismissible fade show" role="alert">
@@ -2245,6 +2337,7 @@ new #[Layout('layouts.app')] class extends Component
                             </div>
                         </div>
                     @endif
+                    @endif
 
                     @if ($active_tab === 'review')
                         <div class="row">
@@ -2252,6 +2345,10 @@ new #[Layout('layouts.app')] class extends Component
                             <div class="col-md-3 mb-3"><div class="border rounded p-3"><div class="text-muted">Pertemuan</div><h4 class="mb-0">{{ $totalPertemuan }}</h4></div></div>
                             <div class="col-md-3 mb-3"><div class="border rounded p-3"><div class="text-muted">Materi</div><h4 class="mb-0">{{ $totalMateri }}</h4></div></div>
                             <div class="col-md-3 mb-3"><div class="border rounded p-3"><div class="text-muted">Rincian</div><h4 class="mb-0">{{ $totalRinci }}</h4></div></div>
+                        </div>
+
+                        <div class="alert {{ abs($totalBobotSks - (float) $sks) < 0.00005 ? 'alert-success' : 'alert-danger' }}" role="status">
+                            Total bobot kegiatan {{ number_format($totalBobotSks, 4, ',', '.') }} dari {{ number_format((float) $sks, 4, ',', '.') }} SKS mata kuliah.
                         </div>
 
                         @if ($totalRinciTanpaTanggal > 0)
@@ -2268,7 +2365,7 @@ new #[Layout('layouts.app')] class extends Component
                                 $rinciCount = 0;
                                 $tanggalRencana = collect();
                                 foreach ($item['materi'] ?? [] as $materiReview) {
-                                    $rinciCount += count($materiReview['rinci'] ?? []);
+                                    $rinciCount += collect($materiReview['rinci'] ?? [])->where('status', 'aktif')->count();
                                     foreach ($materiReview['rinci'] ?? [] as $rinciReview) {
                                         if (! empty($rinciReview['tanggal_rencana'])) {
                                             $tanggalRencana->push($rinciReview['tanggal_rencana']);
@@ -2299,6 +2396,7 @@ new #[Layout('layouts.app')] class extends Component
                                     <div>
                                         <div class="fw-semibold">{{ $jenisTerpilih ? $jenisTerpilih->nama : 'Kegiatan belum dipilih' }}</div>
                                         <div class="text-muted small">{{ $item['durasi_menit'] ?? 0 }} menit per sesi</div>
+                                        <div class="text-muted small">{{ number_format((float) ($item['bobot_sks'] ?? 0), 4, ',', '.') }} SKS total · {{ $rinciCount }} pertemuan aktif</div>
                                         <div class="text-muted small">
                                             Rencana:
                                             @if ($tanggalRencana->isEmpty())
@@ -2314,6 +2412,8 @@ new #[Layout('layouts.app')] class extends Component
                                             Penilaian:
                                             @if (empty($item['perlu_penilaian']))
                                                 tidak dinilai
+                                            @elseif ($jenisTerpilih?->sumber_nilai === 'cbt')
+                                                <span class="text-info">bersumber dari CBT eksternal</span>
                                             @elseif ($komponenReview->isEmpty())
                                                 <span class="text-danger">ditandai dinilai tapi komponennya belum disusun</span>
                                             @else
@@ -2326,7 +2426,9 @@ new #[Layout('layouts.app')] class extends Component
                                         <span class="badge bg-primary-subtle text-primary">{{ count($item['materi'] ?? []) }} materi</span>
                                         <span class="badge bg-secondary-subtle text-secondary">{{ $rinciCount }} rincian</span>
                                         @if (!empty($item['perlu_penilaian']))
-                                            <span class="badge bg-info-subtle text-info">{{ $komponenReview->count() }} komponen nilai</span>
+                                            <span class="badge bg-info-subtle text-info">
+                                                {{ $jenisTerpilih?->sumber_nilai === 'cbt' ? 'CBT eksternal' : $komponenReview->count().' komponen nilai' }}
+                                            </span>
                                         @endif
                                     </div>
                                 </div>

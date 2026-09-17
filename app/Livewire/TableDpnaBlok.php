@@ -58,14 +58,23 @@ final class TableDpnaBlok extends Component
         return view('livewire.table-dpna-blok', [
             'bloks' => Blok::query()
                 ->dapatDikelolaOleh(auth()->user())
-                ->with(['prodi:id_prodi,nama', 'semester:id_semester,nama,tahun'])
-                ->withCount(['peserta_blok', 'pertemuan_blok'])
+                ->with([
+                    'prodi:id_prodi,nama',
+                    'semester:id_semester,nama,tahun',
+                    'finalisasi_dpna_terbaru:finalisasi_dpna_blok.id_finalisasi_dpna_blok,finalisasi_dpna_blok.blok_id,finalisasi_dpna_blok.versi,finalisasi_dpna_blok.status',
+                ])
+                ->withCount([
+                    'peserta_blok',
+                    'pertemuan_blok',
+                    'grup_dpna_blok as grup_dpna_count',
+                ])
                 ->withSum([
                     'aturan_kegiatan_blok as total_bobot_kegiatan_dpna' => fn ($query) => $query->where('nilai_masuk_dpna', true),
                 ], 'bobot_nilai_dpna')
-                ->when($search !== '', fn ($query) => $query->where(fn ($query) => $query
-                    ->where('kode', 'like', "%{$search}%")
-                    ->orWhere('nama', 'like', "%{$search}%")))
+                ->withSum([
+                    'grup_dpna_blok as total_bobot_grup_dpna' => fn ($query) => $query->where('aktif', true),
+                ], 'bobot')
+                ->when($search !== '', fn ($query) => $query->where('nama', 'like', "%{$search}%"))
                 ->when($this->prodiId !== '', fn ($query) => $query->where('prodi_id', $this->prodiId))
                 ->when($this->semesterId !== '', fn ($query) => $query->where('semester_id', $this->semesterId))
                 ->orderByDesc('tanggal_mulai')

@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasManyThrough;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\HasOneThrough;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
@@ -111,9 +112,9 @@ class Blok extends Model
         );
     }
 
-    public function mata_kuliah(): HasMany
+    public function mata_kuliah(): BelongsTo
     {
-        return $this->hasMany(MataKuliah::class, 'blok_id', 'id');
+        return $this->belongsTo(MataKuliah::class, 'mata_kuliah_id', 'id');
     }
 
     /**
@@ -137,5 +138,20 @@ class Blok extends Model
     public function pertemuan_blok(): HasMany
     {
         return $this->hasMany(PertemuanBlok::class, 'blok_id', 'id');
+    }
+
+    public function grup_dpna_blok(): HasMany
+    {
+        return $this->hasMany(GrupDpnaBlok::class, 'blok_id', 'id');
+    }
+
+    public function finalisasi_dpna_blok(): HasMany
+    {
+        return $this->hasMany(FinalisasiDpnaBlok::class, 'blok_id', 'id');
+    }
+
+    public function finalisasi_dpna_terbaru(): HasOne
+    {
+        return $this->hasOne(FinalisasiDpnaBlok::class, 'blok_id', 'id')->latestOfMany('versi');
     }
 }

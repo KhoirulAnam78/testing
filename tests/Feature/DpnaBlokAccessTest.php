@@ -25,7 +25,10 @@ class DpnaBlokAccessTest extends TestCase
         $blok = $this->blok();
 
         $this->actingAs($user)->get(route('dpna-blok.index'))->assertOk()->assertSee('DPNA Blok');
-        $this->get(route('dpna-blok.detail', Crypt::encrypt($blok->id)))->assertOk()->assertSee($blok->nama);
+        $this->get(route('dpna-blok.detail', Crypt::encrypt($blok->id)))
+            ->assertOk()
+            ->assertSee($blok->nama)
+            ->assertDontSee($blok->kode);
     }
 
     public function test_koordinator_hanya_dapat_membuka_blok_kelolaannya(): void

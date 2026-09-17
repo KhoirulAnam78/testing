@@ -68,7 +68,9 @@ final class TableMataKuliah extends PowerGridComponent
             ->add('kode')
             ->add('nama')
             ->add('prodi_nama', fn ($row) => $row->prodi?->nama ?: '-')
-            ->add('blok_nama', fn ($row) => $row->blok ? $row->blok->kode.' - '.$row->blok->nama : '-')
+            ->add('blok_nama', fn ($row) => $row->blok->isNotEmpty()
+                ? $row->blok->map(fn ($blok) => $blok->kode.' - '.$blok->nama)->implode(', ')
+                : '-')
             ->add('sks')
             ->add('status', fn ($row) => $row->status === 'aktif'
                 ? '<span class="badge bg-success">Aktif</span>'
@@ -122,7 +124,7 @@ final class TableMataKuliah extends PowerGridComponent
             id: $id,
             confirmEvent: 'delete-mata-kuliah-confirmed',
             title: 'Hapus mata kuliah?',
-            text: 'Mata kuliah yang sudah dipakai kelas nantinya tidak dapat dihapus.',
+            text: 'Mata kuliah tidak dapat dihapus selama masih dipakai blok.',
             confirmButtonText: 'Ya, hapus',
             cancelButtonText: 'Batal',
         );
@@ -137,7 +139,18 @@ final class TableMataKuliah extends PowerGridComponent
             abort(404);
         }
 
-        MataKuliah::findOrFail($decrypted)->delete();
+        $mataKuliah = MataKuliah::findOrFail($decrypted);
+
+        if ($mataKuliah->blok()->exists()) {
+            $this->dispatch('notify', message: [
+                'status' => 'error',
+                'message' => 'Mata kuliah tidak dapat dihapus karena masih dipakai blok.',
+            ]);
+
+            return;
+        }
+
+        $mataKuliah->delete();
 
         $this->dispatch('notify', message: [
             'status' => 'success',

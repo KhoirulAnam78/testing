@@ -6,9 +6,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <meta name="description"
-        content="SIAKAD pembelajaran blok Fakultas Kedokteran UIN Sulthan Thaha Saifuddin Jambi: semester, blok, kelas, kelompok belajar, jadwal dosen, presensi, logbook, dan rekap nilai akhir." />
+        content="{{ config('app.tagline') }} untuk pembelajaran blok Fakultas Kedokteran UIN Sulthan Thaha Saifuddin Jambi." />
 
-    <title>Sistem Blok — SIAKAD Fakultas Kedokteran UIN Jambi</title>
+    <title>{{ config('app.name') }} — {{ config('app.tagline') }}</title>
 
     <link rel="shortcut icon" href="{{ asset('assets/images/favicon/favicon-uinjambi.svg') }}">
 
@@ -308,12 +308,23 @@
         }
 
         .hero__title {
-            margin-top: 1.1rem;
-            font-size: clamp(2.1rem, 4.1vw, 3.35rem);
+            margin-top: 1rem;
+            font-size: clamp(3.4rem, 9vw, 7.2rem);
             font-weight: 700;
-            line-height: 1.07;
-            letter-spacing: -.028em;
-            max-width: 20ch;
+            line-height: .9;
+            letter-spacing: .045em;
+            color: var(--green-deep);
+        }
+
+        .hero__tagline {
+            margin-top: 1.35rem;
+            max-width: 30ch;
+            font-family: var(--font-display);
+            font-size: clamp(1.35rem, 2.5vw, 1.9rem);
+            font-weight: 600;
+            line-height: 1.25;
+            letter-spacing: -.018em;
+            color: var(--ink);
         }
 
         .hero__lede {
@@ -791,6 +802,12 @@
                 padding-block: 42px;
             }
         }
+
+        @media (max-width: 575.98px) {
+            .mark strong + span {
+                display: none;
+            }
+        }
     </style>
 </head>
 
@@ -810,8 +827,8 @@
             <a class="mark" href="{{ url('/') }}">
                 <img src="{{ asset('assets/images/favicon/favicon-uinjambi.svg') }}" alt="">
                 <span>
-                    <strong>Sistem Blok</strong>
-                    <span>SIAKAD Fakultas Kedokteran</span>
+                    <strong>{{ config('app.name') }}</strong>
+                    <span>{{ config('app.tagline') }}</span>
                 </span>
             </a>
 
@@ -845,11 +862,11 @@
         <section class="hero">
             <div class="wrap hero__grid">
                 <div class="hero__body">
-                    <p class="eyebrow rise">SIAKAD &middot; Pembelajaran berbasis blok</p>
+                    <p class="eyebrow rise">Fakultas Kedokteran &middot; Pembelajaran berbasis blok</p>
 
-                    <h1 class="hero__title rise">
-                        Menjalankan pembelajaran blok, dari susunan materi sampai nilai akhir.
-                    </h1>
+                    <h1 class="hero__title rise">{{ config('app.name') }}</h1>
+
+                    <p class="hero__tagline rise">{{ config('app.tagline') }}</p>
 
                     <p class="lede hero__lede rise">
                         Satu sistem untuk menyusun blok, membagi kelas dan kelompok belajar, menjadwalkan dosen,
@@ -1054,7 +1071,6 @@
 
             <div class="foot__base">
                 <span>{{ date('Y') }} &copy; Fakultas Kedokteran UIN Jambi</span>
-                <span>Laravel {{ Illuminate\Foundation\Application::VERSION }} &middot; PHP {{ PHP_VERSION }}</span>
             </div>
         </div>
     </footer>

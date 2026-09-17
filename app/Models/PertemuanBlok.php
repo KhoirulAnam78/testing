@@ -47,7 +47,8 @@ class PertemuanBlok extends Model
 
     public function dosen_pertemuan_blok(): HasMany
     {
-        return $this->hasMany(DosenPertemuanBlok::class, 'pertemuan_blok_id', 'id_pertemuan_blok');
+        return $this->hasMany(DosenPertemuanBlok::class, 'pertemuan_blok_id', 'id_pertemuan_blok')
+            ->chaperone('pertemuan_blok');
     }
 
     /**

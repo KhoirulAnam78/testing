@@ -124,7 +124,7 @@ new class extends Component
                 'aturan_kegiatan_blok' => fn ($query) => $query
                     ->select('id', 'jenis_kegiatan_id', 'perlu_presensi', 'perlu_penilaian')
                     ->withCount('komponen_penilaian_blok'),
-                'aturan_kegiatan_blok.jenis_kegiatan:id,nama',
+                'aturan_kegiatan_blok.jenis_kegiatan:id,nama,sumber_nilai',
                 'dosen_pertemuan_blok.dosen:id_dosen,nama',
                 'monitoring_pertemuan_blok',
             ])
@@ -204,7 +204,8 @@ new class extends Component
             ->findOrFail((int) $id);
 
         $this->pelaksanaan_pertemuan_id = $pertemuan->id_pertemuan_blok;
-        $this->pelaksanaan_mode = in_array($mode, self::MODE_PELAKSANAAN, true) ? $mode : 'pelaksanaan';
+        $modeNilaiCbt = $mode === 'nilai' && AksesPertemuanBlok::sumberNilaiCbt($pertemuan->id_pertemuan_blok);
+        $this->pelaksanaan_mode = in_array($mode, self::MODE_PELAKSANAAN, true) && ! $modeNilaiCbt ? $mode : 'pelaksanaan';
         $this->pelaksanaan_judul = trim(
             ($pertemuan->materi_rinci_blok?->judul ?: $pertemuan->topik ?: 'Pertemuan')
             .' - '.($pertemuan->kelompok_blok?->kode ?: '')
@@ -215,7 +216,11 @@ new class extends Component
 
     public function setPelaksanaanMode(string $mode): void
     {
-        if (in_array($mode, self::MODE_PELAKSANAAN, true)) {
+        $modeNilaiCbt = $mode === 'nilai'
+            && $this->pelaksanaan_pertemuan_id
+            && AksesPertemuanBlok::sumberNilaiCbt($this->pelaksanaan_pertemuan_id);
+
+        if (in_array($mode, self::MODE_PELAKSANAAN, true) && ! $modeNilaiCbt) {
             $this->pelaksanaan_mode = $mode;
         }
     }
@@ -489,7 +494,9 @@ new class extends Component
                                     @else
                                         @php($komponenCount = (int) ($item->aturan_kegiatan_blok?->komponen_penilaian_blok_count ?? 0))
                                         @php($selTarget = $komponenCount * (int) ($item->kelompok_blok?->anggota_kelompok_blok_count ?? 0))
-                                        @if ($komponenCount === 0)
+                                        @if ($item->aturan_kegiatan_blok?->jenis_kegiatan?->sumber_nilai === 'cbt')
+                                            <span class="badge bg-info-subtle text-info">CBT eksternal</span>
+                                        @elseif ($komponenCount === 0)
                                             <span class="badge bg-danger-subtle text-danger">rubrik kosong</span>
                                         @elseif (! $item->nilai_tercatat_count)
                                             <span class="badge bg-warning-subtle text-warning">belum diisi</span>
@@ -506,7 +513,7 @@ new class extends Component
                                         wire:click="kelolaPelaksanaan('{{ $item->id_pertemuan_blok }}', 'pelaksanaan')">
                                         <i class="ri-booklet-line"></i> Isi Monitoring
                                     </button>
-                                    @if ($item->aturan_kegiatan_blok?->perlu_penilaian)
+                                    @if ($item->aturan_kegiatan_blok?->perlu_penilaian && $item->aturan_kegiatan_blok?->jenis_kegiatan?->sumber_nilai !== 'cbt')
                                         <button type="button" class="btn btn-info btn-sm mt-1"
                                             wire:click="kelolaPelaksanaan('{{ $item->id_pertemuan_blok }}', 'nilai')">
                                             <i class="ri-graduation-cap-line"></i> Nilai
@@ -553,13 +560,15 @@ new class extends Component
                                     <i class="ri-booklet-line"></i> Monitoring
                                 </button>
                             </li>
-                            <li class="nav-item">
-                                <button type="button"
-                                    class="nav-link {{ $pelaksanaan_mode === 'nilai' ? 'active' : '' }}"
-                                    wire:click="setPelaksanaanMode('nilai')">
-                                    <i class="ri-graduation-cap-line"></i> Nilai
-                                </button>
-                            </li>
+                            @if ($pelaksanaan_pertemuan_id && ! AksesPertemuanBlok::sumberNilaiCbt($pelaksanaan_pertemuan_id))
+                                <li class="nav-item">
+                                    <button type="button"
+                                        class="nav-link {{ $pelaksanaan_mode === 'nilai' ? 'active' : '' }}"
+                                        wire:click="setPelaksanaanMode('nilai')">
+                                        <i class="ri-graduation-cap-line"></i> Nilai
+                                    </button>
+                                </li>
+                            @endif
                         </ul>
 
                         @if ($pelaksanaan_mode === 'nilai')

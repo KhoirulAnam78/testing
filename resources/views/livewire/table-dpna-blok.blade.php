@@ -2,7 +2,7 @@
     <div class="row g-2 mb-3">
         <div class="col-lg-6">
             <label class="visually-hidden" for="dpna-search">Cari blok</label>
-            <input id="dpna-search" type="search" class="form-control" placeholder="Cari kode atau nama blok..." wire:model.live.debounce.300ms="search">
+            <input id="dpna-search" type="search" class="form-control" placeholder="Cari nama blok..." wire:model.live.debounce.300ms="search">
         </div>
         <div class="col-md-4 col-lg-2">
             <label class="visually-hidden" for="dpna-prodi">Prodi</label>
@@ -25,20 +25,28 @@
 
     <div class="table-responsive">
         <table class="table table-hover align-middle">
-            <thead><tr><th>Blok</th><th>Prodi / Semester</th><th class="text-center">Peserta</th><th class="text-center">Pertemuan</th><th>Status Bobot</th><th></th></tr></thead>
+            <thead><tr><th>Blok</th><th>Prodi / Semester</th><th class="text-center">Peserta</th><th class="text-center">Pertemuan</th><th>Status Bobot</th><th>Status DPNA</th><th></th></tr></thead>
             <tbody>
             @forelse ($bloks as $blok)
-                @php($totalBobot = ($blok->kehadiran_masuk_dpna ? (float) $blok->bobot_kehadiran_dpna : 0) + (float) $blok->total_bobot_kegiatan_dpna)
+                @php($bobotPenilaian = $blok->grup_dpna_count > 0 ? (float) $blok->total_bobot_grup_dpna : (float) $blok->total_bobot_kegiatan_dpna)
+                @php($totalBobot = ($blok->kehadiran_masuk_dpna ? (float) $blok->bobot_kehadiran_dpna : 0) + $bobotPenilaian)
                 <tr wire:key="dpna-{{ $blok->id }}">
-                    <td><div class="fw-semibold">{{ $blok->kode }}</div><div class="text-muted small">{{ $blok->nama }}</div></td>
+                    <td><div class="fw-semibold">{{ $blok->nama }}</div></td>
                     <td>{{ $blok->prodi->nama }}<div class="text-muted small">{{ ucfirst($blok->semester->nama) }} {{ $blok->semester->tahun }}</div></td>
                     <td class="text-center">{{ $blok->peserta_blok_count }}</td>
                     <td class="text-center">{{ $blok->pertemuan_blok_count }}</td>
                     <td><span class="badge {{ abs($totalBobot - 100) < .001 ? 'bg-success-subtle text-success' : 'bg-warning-subtle text-warning' }}">{{ number_format($totalBobot, 2, ',', '.') }}%</span></td>
+                    <td>
+                        @if ($blok->finalisasi_dpna_terbaru?->status === 'final')
+                            <span class="badge bg-success-subtle text-success">Final v{{ $blok->finalisasi_dpna_terbaru->versi }}</span>
+                        @else
+                            <span class="badge bg-warning-subtle text-warning">Draft</span>
+                        @endif
+                    </td>
                     <td class="text-end"><a class="btn btn-primary btn-sm" wire:navigate href="{{ route('dpna-blok.detail', Crypt::encrypt($blok->id)) }}">Buka DPNA</a></td>
                 </tr>
             @empty
-                <tr><td colspan="6" class="text-center text-muted py-4">Blok tidak ditemukan.</td></tr>
+                <tr><td colspan="7" class="text-center text-muted py-4">Blok tidak ditemukan.</td></tr>
             @endforelse
             </tbody>
         </table>

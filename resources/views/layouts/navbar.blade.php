@@ -36,7 +36,7 @@ new class extends Component {
                         <img src="{{ asset('assets/images/favicon/favicon-uinjambi.svg') }}" alt="Logo UIN Jambi">
                     </span>
                     <span class="siakad-brand-text fw-semibold text-body">
-                        Sistem Blok
+                        {{ config('app.name') }}
                         <span class="d-block siakad-brand-subtitle">FK UIN Jambi</span>
                     </span>
                 </span>
@@ -55,7 +55,7 @@ new class extends Component {
                         <img src="{{ asset('assets/images/favicon/favicon-uinjambi.svg') }}" alt="Logo UIN Jambi">
                     </span>
                     <span class="siakad-brand-text fw-semibold text-white">
-                        Sistem Blok
+                        {{ config('app.name') }}
                         <span class="d-block siakad-brand-subtitle">FK UIN Jambi</span>
                     </span>
                 </span>

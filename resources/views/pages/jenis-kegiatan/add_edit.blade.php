@@ -22,6 +22,10 @@ new #[Layout('layouts.app')] class extends Component
 
     public $durasi_menit_default = 100;
 
+    public $bobot_sks_per_pertemuan = 0;
+
+    public $sumber_nilai = 'manual';
+
     public $deskripsi;
 
     public $status = 'aktif';
@@ -55,6 +59,8 @@ new #[Layout('layouts.app')] class extends Component
             $this->nama = $jenis->nama;
             $this->jumlah_pertemuan_default = $jenis->jumlah_pertemuan_default;
             $this->durasi_menit_default = $jenis->durasi_menit_default;
+            $this->bobot_sks_per_pertemuan = $jenis->bobot_sks_per_pertemuan;
+            $this->sumber_nilai = $jenis->sumber_nilai;
             $this->deskripsi = $jenis->deskripsi;
             $this->status = $jenis->status;
 
@@ -119,6 +125,8 @@ new #[Layout('layouts.app')] class extends Component
             'nama' => ['required', 'string', 'max:255'],
             'jumlah_pertemuan_default' => ['required', 'integer', 'min:1', 'max:100'],
             'durasi_menit_default' => ['required', 'integer', 'min:1', 'max:1440'],
+            'bobot_sks_per_pertemuan' => ['required', 'numeric', 'min:0', 'max:9999.9999', 'decimal:0,4'],
+            'sumber_nilai' => ['required', Rule::in(['manual', 'cbt'])],
             'deskripsi' => ['nullable', 'string'],
             'status' => ['required', Rule::in(['aktif', 'nonaktif'])],
             'standar' => ['array'],
@@ -134,6 +142,7 @@ new #[Layout('layouts.app')] class extends Component
             'nama.required' => 'Nama jenis kegiatan wajib diisi.',
             'jumlah_pertemuan_default.required' => 'Jumlah pertemuan default wajib diisi.',
             'durasi_menit_default.required' => 'Durasi default wajib diisi.',
+            'bobot_sks_per_pertemuan.required' => 'Bobot SKS per pertemuan wajib diisi.',
             'status.required' => 'Status wajib dipilih.',
             'standar.*.nama.required' => 'Nama komponen penilaian wajib diisi.',
             'standar.*.nilai_min.required' => 'Nilai minimum wajib diisi.',
@@ -235,15 +244,33 @@ new #[Layout('layouts.app')] class extends Component
                         </div>
                     </div>
                     <div class="row">
-                        <div class="col-md-6 mb-3">
+                        <div class="col-md-4 mb-3">
                             <label class="form-label">Jumlah Pertemuan Default</label>
                             <input type="number" class="form-control" wire:model="jumlah_pertemuan_default">
                             @error('jumlah_pertemuan_default') <div class="text-sm text-danger">{{ $message }}</div> @enderror
                         </div>
-                        <div class="col-md-6 mb-3">
+                        <div class="col-md-4 mb-3">
                             <label class="form-label">Durasi Menit Default</label>
                             <input type="number" class="form-control" wire:model="durasi_menit_default">
                             @error('durasi_menit_default') <div class="text-sm text-danger">{{ $message }}</div> @enderror
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Bobot SKS per Pertemuan</label>
+                            <input type="number" min="0" max="9999.9999" step="0.0001" class="form-control"
+                                wire:model="bobot_sks_per_pertemuan" placeholder="Contoh: 0.125">
+                            <div class="form-text">Dibagi rata kepada seluruh dosen pengampu pada pertemuan yang sama.</div>
+                            @error('bobot_sks_per_pertemuan') <div class="text-sm text-danger">{{ $message }}</div> @enderror
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Sumber Nilai</label>
+                            <select class="form-select" wire:model.live="sumber_nilai">
+                                <option value="manual">Input manual</option>
+                                <option value="cbt">CBT eksternal</option>
+                            </select>
+                            <div class="form-text">CBT eksternal tidak dapat diisi atau diimport manual dari pertemuan.</div>
+                            @error('sumber_nilai') <div class="text-sm text-danger">{{ $message }}</div> @enderror
                         </div>
                     </div>
                     <div class="mb-3">

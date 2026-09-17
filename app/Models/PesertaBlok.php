@@ -56,4 +56,14 @@ class PesertaBlok extends Model
     {
         return $this->hasMany(NilaiPertemuanBlok::class, 'peserta_blok_id', 'id_peserta_blok');
     }
+
+    public function nilai_cbt_blok(): HasMany
+    {
+        return $this->hasMany(NilaiCbtBlok::class, 'peserta_blok_id', 'id_peserta_blok');
+    }
+
+    public function snapshot_dpna_peserta(): HasMany
+    {
+        return $this->hasMany(SnapshotDpnaPeserta::class, 'peserta_blok_id', 'id_peserta_blok');
+    }
 }

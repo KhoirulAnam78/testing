@@ -10,6 +10,7 @@
  */
 
 use App\Models\LogbookPertemuanBlok;
+use App\Models\PresensiPertemuanBlok;
 use App\Support\AksesPertemuanBlok;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Storage;
@@ -87,8 +88,32 @@ Route::middleware(['auth', 'route.permission'])->group(function () {
     // Portal Saya: halaman yang di-scope ke user yang login, bukan CRUD master data.
     Route::livewire('pertemuan-saya', 'pages::pertemuan-saya.index')
         ->name('pertemuan-saya.index');
+    Route::livewire('rekap-sks-saya', 'pages::rekap-sks-dosen.index')
+        ->name('rekap-sks-saya.index');
     Route::livewire('materi-saya', 'pages::materi-saya.index')
         ->name('materi-saya.index');
+
+    Route::livewire('rekap-sks-dosen', 'pages::rekap-sks-dosen.index')
+        ->name('rekap-sks-dosen.index');
+
+    Route::get('surat-keterangan/{presensi}/download', function (PresensiPertemuanBlok $presensi) {
+        abort_unless(
+            AksesPertemuanBlok::bolehKelolaPertemuan(auth()->user(), (int) $presensi->pertemuan_blok_id),
+            403
+        );
+        abort_unless(in_array($presensi->status, ['sakit', 'izin'], true), 404);
+        abort_unless($presensi->path_surat_keterangan, 404);
+        abort_unless(Storage::disk('local')->exists($presensi->path_surat_keterangan), 404);
+
+        return Storage::disk('local')->download(
+            $presensi->path_surat_keterangan,
+            $presensi->nama_file_surat_keterangan,
+            [
+                'Content-Type' => $presensi->mime_surat_keterangan,
+                'X-Content-Type-Options' => 'nosniff',
+            ]
+        );
+    })->name('surat-keterangan.download');
 
     Route::get('logbook/{logbook}/download', function (LogbookPertemuanBlok $logbook) {
         abort_unless(

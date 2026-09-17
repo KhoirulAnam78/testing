@@ -198,9 +198,10 @@ new #[Layout('layouts.app')] class extends Component
                     ->withCount('anggota_kelompok_blok'),
                 'materi_rinci_blok:id_materi_rinci_blok,judul,pertemuan_ke',
                 'aturan_kegiatan_blok' => fn ($query) => $query
-                    ->select('id', 'jenis_kegiatan_id', 'perlu_presensi', 'perlu_penilaian', 'perlu_logbook')
-                    ->withCount('komponen_penilaian_blok'),
-                'aturan_kegiatan_blok.jenis_kegiatan:id,nama',
+                    ->select('id', 'jenis_kegiatan_id', 'bobot_sks', 'perlu_presensi', 'perlu_penilaian', 'perlu_logbook')
+                    ->withCount(['komponen_penilaian_blok', 'materi_rinci_blok']),
+                'aturan_kegiatan_blok.jenis_kegiatan:id,nama,sumber_nilai',
+                'dosen_pertemuan_blok:id_dosen_pertemuan_blok,pertemuan_blok_id,dosen_id',
                 'monitoring_pertemuan_blok',
             ])
             ->withCount([
@@ -303,11 +304,12 @@ new #[Layout('layouts.app')] class extends Component
                 'materi_rinci_blok:id_materi_rinci_blok,judul,pertemuan_ke',
                 'blok:id,kode,nama',
                 'aturan_kegiatan_blok:id,jenis_kegiatan_id,perlu_penilaian,perlu_logbook',
-                'aturan_kegiatan_blok.jenis_kegiatan:id,nama',
+                'aturan_kegiatan_blok.jenis_kegiatan:id,nama,sumber_nilai',
             ])
             ->findOrFail((int) $id);
 
-        $perluPenilaian = (bool) $pertemuan->aturan_kegiatan_blok?->perlu_penilaian;
+        $perluPenilaian = (bool) $pertemuan->aturan_kegiatan_blok?->perlu_penilaian
+            && $pertemuan->aturan_kegiatan_blok?->jenis_kegiatan?->sumber_nilai !== 'cbt';
         $perluLogbook = (bool) $pertemuan->aturan_kegiatan_blok?->perlu_logbook;
         $modeTersedia = ['pelaksanaan'];
 
@@ -584,6 +586,12 @@ new #[Layout('layouts.app')] class extends Component
                                             @if ($item->kelompok_blok?->anggota_kelompok_blok_count)
                                                 <div class="text-muted small">{{ $item->kelompok_blok->anggota_kelompok_blok_count }} mahasiswa</div>
                                             @endif
+                                            @php($penugasan = $item->dosen_pertemuan_blok->firstWhere('dosen_id', auth()->user()->dosen->id_dosen))
+                                            @if ($penugasan)
+                                                <div class="small fw-semibold text-primary mt-1">
+                                                    Bobot {{ number_format($penugasan->bobot_sks, 4, ',', '.') }} SKS
+                                                </div>
+                                            @endif
                                         </td>
                                         <td>
                                             @php($jurnal = $item->monitoring_pertemuan_blok)
@@ -614,7 +622,9 @@ new #[Layout('layouts.app')] class extends Component
                                                 @else
                                                     @php($komponenCount = (int) ($item->aturan_kegiatan_blok?->komponen_penilaian_blok_count ?? 0))
                                                     @php($selTarget = $komponenCount * (int) ($item->kelompok_blok?->anggota_kelompok_blok_count ?? 0))
-                                                    @if ($komponenCount === 0)
+                                                    @if ($item->aturan_kegiatan_blok?->jenis_kegiatan?->sumber_nilai === 'cbt')
+                                                        <span class="badge bg-info-subtle text-info">CBT eksternal</span>
+                                                    @elseif ($komponenCount === 0)
                                                         <span class="badge bg-danger-subtle text-danger">rubrik kosong</span>
                                                     @elseif (! $item->nilai_tercatat_count)
                                                         <span class="badge bg-warning-subtle text-warning">belum diisi</span>
@@ -639,7 +649,7 @@ new #[Layout('layouts.app')] class extends Component
                                                 wire:click="kelolaPelaksanaan('{{ $item->id_pertemuan_blok }}', 'pelaksanaan')">
                                                 <i class="ri-booklet-line"></i> {{ $jurnal?->divalidasi_pada ? 'Lihat Monitoring' : 'Isi Monitoring' }}
                                             </button>
-                                            @if ($item->aturan_kegiatan_blok?->perlu_penilaian)
+                                            @if ($item->aturan_kegiatan_blok?->perlu_penilaian && $item->aturan_kegiatan_blok?->jenis_kegiatan?->sumber_nilai !== 'cbt')
                                                 <button type="button" class="btn btn-info btn-sm mt-1"
                                                     wire:click="kelolaPelaksanaan('{{ $item->id_pertemuan_blok }}', 'nilai')">
                                                     <i class="ri-graduation-cap-line"></i> Nilai

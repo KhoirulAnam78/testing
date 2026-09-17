@@ -4,9 +4,9 @@
 
 <head>
     <meta charset="utf-8" />
-    <title>Sistem Blok — SIAKAD Fakultas Kedokteran UIN Jambi</title>
+    <title>{{ config('app.name') }} — {{ config('app.tagline') }}</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta content="Sistem manajemen pembelajaran blok Fakultas Kedokteran UIN Jambi" name="description" />
+    <meta content="{{ config('app.tagline') }} untuk pembelajaran blok Fakultas Kedokteran UIN Jambi" name="description" />
     <meta content="Fakultas Kedokteran UIN Jambi" name="author" />
 
     <link data-navigate-once rel="shortcut icon" href="{{ asset('assets/images/favicon/favicon-uinjambi.svg') }}">
@@ -952,7 +952,7 @@
                 <div class="container-fluid">
                     <div class="row align-items-center">
                         <div class="col-sm-6">
-                            {{ date('Y') }} &copy; Sistem Blok FK UIN Jambi
+                            {{ date('Y') }} &copy; {{ config('app.name') }} — FK UIN Jambi
                         </div>
                         <div class="col-sm-6">
                             <div class="text-sm-end d-none d-sm-block">

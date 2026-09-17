@@ -152,13 +152,7 @@
                             <div class="card-body d-flex flex-column">
                                 <div class="mb-3">
                                     <div class="text-muted small mb-1">Mata kuliah</div>
-                                    <div class="d-flex flex-wrap gap-1">
-                                        @forelse ($blok->mata_kuliah as $mataKuliah)
-                                            <span class="badge bg-light text-body border">{{ $mataKuliah->kode }}</span>
-                                        @empty
-                                            <span class="text-muted">-</span>
-                                        @endforelse
-                                    </div>
+                                    <span class="badge bg-light text-body border">{{ $blok->mata_kuliah?->kode ?: '-' }}</span>
                                 </div>
 
                                 <div class="text-muted small mb-3">

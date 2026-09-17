@@ -105,7 +105,10 @@ new class extends Component
         }
 
         return $this->pertemuanCache = PertemuanBlok::query()
-            ->with('aturan_kegiatan_blok:id,perlu_penilaian')
+            ->with([
+                'aturan_kegiatan_blok:id,jenis_kegiatan_id,perlu_penilaian',
+                'aturan_kegiatan_blok.jenis_kegiatan:id,sumber_nilai',
+            ])
             ->findOrFail($this->pertemuan_blok_id);
     }
 
@@ -154,6 +157,11 @@ new class extends Component
     public function bolehIsi(): bool
     {
         return AksesPertemuanBlok::bolehIsiNilai(auth()->user(), $this->pertemuan_blok_id);
+    }
+
+    public function sumberCbt(): bool
+    {
+        return $this->pertemuan()->aturan_kegiatan_blok?->jenis_kegiatan?->sumber_nilai === 'cbt';
     }
 
     public function simpan(): void
@@ -278,7 +286,7 @@ new class extends Component
      */
     public function unduhTemplate()
     {
-        abort_unless($this->bolehIsi(), 403);
+        abort_unless(! $this->sumberCbt() && $this->bolehIsi(), 403);
 
         $anggota = $this->anggota();
         $komponen = $this->komponen();
@@ -308,7 +316,7 @@ new class extends Component
      */
     public function importNilai(): void
     {
-        abort_unless($this->bolehIsi(), 403);
+        abort_unless(! $this->sumberCbt() && $this->bolehIsi(), 403);
 
         $this->validate([
             'importFile' => ['required', 'file', 'mimes:xlsx,xls,csv', 'max:5120'],
@@ -452,6 +460,7 @@ new class extends Component
             'komponen' => $this->komponen(),
             'rekap' => $this->rekap(),
             'bolehIsi' => $this->bolehIsi(),
+            'sumberCbt' => $this->sumberCbt(),
             'perluPenilaian' => (bool) ($pertemuan->aturan_kegiatan_blok?->perlu_penilaian ?? false),
         ]);
     }
@@ -579,7 +588,13 @@ new class extends Component
         </div>
     @endif
 
-    @if ($komponen->isEmpty())
+    @if ($sumberCbt)
+        <div class="alert alert-info mb-0" role="alert">
+            <i class="ri-computer-line"></i>
+            Nilai kegiatan ini bersumber dari aplikasi CBT. Input manual, template, dan import dinonaktifkan.
+            <div class="small mt-1">Nilai CBT akan muncul pada DPNA setelah proses sinkronisasi dari aplikasi sumber tersedia.</div>
+        </div>
+    @elseif ($komponen->isEmpty())
         <div class="alert alert-warning py-2 mb-0 alert-dismissible fade show" role="alert">
             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Tutup"></button>
             <i class="ri-graduation-cap-line"></i>

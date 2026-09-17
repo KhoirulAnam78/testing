@@ -164,7 +164,7 @@
                                 <div class="row g-2 mb-3 text-center">
                                     <div class="col-4">
                                         <div class="master-blok-card__stat rounded py-2 px-1 h-100">
-                                            <div class="fw-semibold">{{ $blok->mata_kuliah_count }}</div>
+                                            <div class="fw-semibold text-truncate" title="{{ $blok->mata_kuliah?->nama }}">{{ $blok->mata_kuliah?->kode ?: '-' }}</div>
                                             <div class="small">Mata Kuliah</div>
                                         </div>
                                     </div>

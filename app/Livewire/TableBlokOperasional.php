@@ -80,7 +80,7 @@ final class TableBlokOperasional extends Component
             ->with([
                 'prodi:id_prodi,nama',
                 'semester:id_semester,nama,tahun',
-                'mata_kuliah:id,blok_id,kode',
+                'mata_kuliah:id,kode',
                 'koordinator:id_dosen,nama',
                 'asisten_koordinator:id_dosen,nama',
                 'pengelola_blok.dosen:id_dosen,nama',

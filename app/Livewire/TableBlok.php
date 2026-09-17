@@ -81,7 +81,7 @@ final class TableBlok extends Component
             id: $id,
             confirmEvent: 'delete-blok-confirmed',
             title: 'Hapus blok?',
-            text: 'Blok hanya bisa dihapus jika belum dipakai mata kuliah.',
+            text: 'Blok hanya bisa dihapus jika belum memiliki data operasional.',
             confirmButtonText: 'Ya, hapus',
             cancelButtonText: 'Batal',
         );
@@ -97,15 +97,6 @@ final class TableBlok extends Component
         }
 
         $blok = Blok::with(['aturan_kegiatan_blok.materi_blok.materi_rinci_blok'])->findOrFail($decrypted);
-
-        if ($blok->mata_kuliah()->exists()) {
-            $this->dispatch('notify', message: [
-                'status' => 'error',
-                'message' => 'Blok tidak dapat dihapus karena sudah dipakai mata kuliah.',
-            ]);
-
-            return;
-        }
 
         if ($blok->peserta_blok()->exists() || $blok->kelompok_blok()->exists() || $blok->pertemuan_blok()->exists()) {
             $this->dispatch('notify', message: [
@@ -143,8 +134,9 @@ final class TableBlok extends Component
             ->with([
                 'prodi:id_prodi,nama',
                 'semester:id_semester,nama,tahun',
+                'mata_kuliah:id,kode,nama',
             ])
-            ->withCount(['mata_kuliah', 'aturan_kegiatan_blok', 'materi_blok'])
+            ->withCount(['aturan_kegiatan_blok', 'materi_blok'])
             ->when($search !== '', fn ($query) => $query->where('nama', 'like', "%{$search}%"))
             ->when($this->prodiId !== '', fn ($query) => $query->where('prodi_id', $this->prodiId))
             ->when($this->semesterId !== '', fn ($query) => $query->where('semester_id', $this->semesterId))

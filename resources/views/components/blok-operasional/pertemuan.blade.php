@@ -33,6 +33,9 @@ new class extends Component
     public array $mapping_catatan = [];
     public array $mapping_dosen_ids = [];
 
+    public array $bentrok_jadwal = [];
+    public ?string $bentrok_jadwal_hash = null;
+
     public string $dosen_search = '';
 
     public ?int $modul_materi_rinci_blok_id = null;
@@ -70,7 +73,7 @@ new class extends Component
             ->with('jenis_kegiatan:id,kode,nama')
             ->withCount(['kelompok_blok', 'pertemuan_blok', 'materi_rinci_blok'])
             ->orderBy('urutan')
-            ->get(['id', 'blok_id', 'jenis_kegiatan_id', 'durasi_menit', 'urutan']);
+            ->get(['id', 'blok_id', 'jenis_kegiatan_id', 'durasi_menit', 'bobot_sks', 'urutan']);
     }
 
     public function resetMapping(): void
@@ -89,6 +92,8 @@ new class extends Component
             'mapping_ruangan',
             'mapping_catatan',
             'mapping_dosen_ids',
+            'bentrok_jadwal',
+            'bentrok_jadwal_hash',
             'dosen_search',
         ]);
         $this->resetErrorBag();
@@ -228,11 +233,22 @@ new class extends Component
 
     public function toggleDosen(string $kelompokId, string $dosenId): void
     {
+        $this->bentrok_jadwal = [];
+        $this->bentrok_jadwal_hash = null;
+
         $current = array_map('strval', $this->mapping_dosen_ids[$kelompokId] ?? []);
 
         $this->mapping_dosen_ids[$kelompokId] = in_array($dosenId, $current, true)
             ? array_values(array_diff($current, [$dosenId]))
             : array_values(array_unique([...$current, $dosenId]));
+    }
+
+    public function updated(string $property): void
+    {
+        if (str_starts_with($property, 'mapping_')) {
+            $this->bentrok_jadwal = [];
+            $this->bentrok_jadwal_hash = null;
+        }
     }
 
     public function salinKelompok(): void
@@ -331,8 +347,12 @@ new class extends Component
         ]);
     }
 
-    public function savePertemuan(): void
+    public function savePertemuan(bool $paksa = false): void
     {
+        $hashPeringatanSebelumnya = $this->bentrok_jadwal_hash;
+        $this->bentrok_jadwal = [];
+        $this->bentrok_jadwal_hash = null;
+
         $payload = $this->validate([
             'aturan_kegiatan_blok_id' => ['required', Rule::exists('aturan_kegiatan_blok', 'id')->where('blok_id', $this->blok_id)],
             'materi_rinci_blok_id' => ['required', 'exists:materi_rinci_blok,id_materi_rinci_blok'],
@@ -434,6 +454,18 @@ new class extends Component
         $jumlahSesi = $materi->jumlah_sesi ?: 1;
         $durasiMenit = $materi->durasi_menit_per_sesi ?: $aturan->durasi_menit;
 
+        $this->bentrok_jadwal = $this->cariBentrokJadwal($payload, $kelompokIds, $materi);
+
+        if ($this->bentrok_jadwal !== []) {
+            $hashJadwalSaatIni = $this->hashJadwalBentrok($payload, $kelompokIds);
+
+            if (! $paksa || ! $hashPeringatanSebelumnya || ! hash_equals($hashPeringatanSebelumnya, $hashJadwalSaatIni)) {
+                $this->bentrok_jadwal_hash = $hashJadwalSaatIni;
+
+                return;
+            }
+        }
+
         DB::transaction(function () use ($payload, $materi, $kelompokIds, $jumlahSesi, $durasiMenit) {
             foreach ($kelompokIds as $kelompokId) {
                 $tanggal = $payload['mapping_tanggal'][$kelompokId] ?? null;
@@ -493,6 +525,180 @@ new class extends Component
             'status' => 'success',
             'message' => 'Dosen pengampu dan jadwal pertemuan berhasil disimpan.',
         ]);
+    }
+
+    /**
+     * Bentrok bersifat peringatan. Pertemuan yang sedang diedit dikecualikan, lalu
+     * jadwal dibandingkan dengan pertemuan tersimpan dan kelompok lain dalam form.
+     */
+    private function cariBentrokJadwal(array $payload, $kelompokIds, MateriRinciBlok $materi): array
+    {
+        $kelompokNama = $this->kelompokOptions()->mapWithKeys(
+            fn (KelompokBlok $kelompok) => [
+                (int) $kelompok->id_kelompok_blok => trim($kelompok->kode.' - '.$kelompok->nama, ' -'),
+            ]
+        );
+        $calonJadwal = collect();
+
+        foreach ($kelompokIds as $kelompokId) {
+            $tanggal = $payload['mapping_tanggal'][$kelompokId] ?? null;
+            $jamMulai = $payload['mapping_jam_mulai'][$kelompokId] ?? null;
+            $jamSelesai = $payload['mapping_jam_selesai'][$kelompokId] ?? null;
+
+            if (! $tanggal || ! $jamMulai || ! $jamSelesai) {
+                continue;
+            }
+
+            $dosenIds = collect($payload['mapping_dosen_ids'][$kelompokId] ?? [])
+                ->map(fn ($id) => (int) $id)
+                ->unique();
+
+            foreach ($dosenIds as $dosenId) {
+                $calonJadwal->push([
+                    'dosen_id' => $dosenId,
+                    'kelompok_id' => (int) $kelompokId,
+                    'kelompok' => $kelompokNama->get((int) $kelompokId, 'Kelompok #'.$kelompokId),
+                    'tanggal' => $tanggal,
+                    'jam_mulai' => $jamMulai,
+                    'jam_selesai' => $jamSelesai,
+                ]);
+            }
+        }
+
+        if ($calonJadwal->isEmpty()) {
+            return [];
+        }
+
+        $namaDosen = Dosen::whereIn('id_dosen', $calonJadwal->pluck('dosen_id')->unique())
+            ->pluck('nama', 'id_dosen');
+        $pertemuanSaatIni = PertemuanBlok::query()
+            ->where('blok_id', $this->blok_id)
+            ->where('materi_rinci_blok_id', $materi->id_materi_rinci_blok)
+            ->whereIn('kelompok_blok_id', $kelompokIds->all())
+            ->pluck('id_pertemuan_blok');
+        $jadwalTersimpan = PertemuanBlok::query()
+            ->whereNotIn('id_pertemuan_blok', $pertemuanSaatIni)
+            ->whereIn('tanggal', $calonJadwal->pluck('tanggal')->unique())
+            ->whereNotNull('jam_mulai')
+            ->whereNotNull('jam_selesai')
+            ->whereHas(
+                'dosen_pertemuan_blok',
+                fn ($query) => $query->whereIn('dosen_id', $calonJadwal->pluck('dosen_id')->unique())
+            )
+            ->with([
+                'blok:id,kode,nama',
+                'kelompok_blok:id_kelompok_blok,kode,nama',
+                'materi_rinci_blok:id_materi_rinci_blok,judul',
+                'dosen_pertemuan_blok' => fn ($query) => $query
+                    ->whereIn('dosen_id', $calonJadwal->pluck('dosen_id')->unique())
+                    ->select(['id_dosen_pertemuan_blok', 'pertemuan_blok_id', 'dosen_id']),
+            ])
+            ->get();
+        $bentrok = collect();
+
+        foreach ($calonJadwal as $calon) {
+            foreach ($jadwalTersimpan as $jadwal) {
+                if (
+                    $jadwal->tanggal?->toDateString() !== $calon['tanggal']
+                    || ! $jadwal->dosen_pertemuan_blok->contains('dosen_id', $calon['dosen_id'])
+                    || ! $this->waktuBertabrakan(
+                        $calon['jam_mulai'],
+                        $calon['jam_selesai'],
+                        $jadwal->jam_mulai,
+                        $jadwal->jam_selesai,
+                    )
+                ) {
+                    continue;
+                }
+
+                $blok = trim(($jadwal->blok?->kode ?? '').' - '.($jadwal->blok?->nama ?? ''), ' -');
+                $kelompok = trim(($jadwal->kelompok_blok?->kode ?? '').' - '.($jadwal->kelompok_blok?->nama ?? ''), ' -');
+                $tujuan = collect([
+                    $blok ?: 'Blok #'.$jadwal->blok_id,
+                    $jadwal->materi_rinci_blok?->judul ?: $jadwal->topik,
+                    $kelompok ?: 'Kelompok #'.$jadwal->kelompok_blok_id,
+                ])->filter()->implode(' / ');
+
+                $bentrok->push(sprintf(
+                    '%s: %s, %s pukul %s-%s bertabrakan dengan %s pukul %s-%s.',
+                    $namaDosen->get($calon['dosen_id'], 'Dosen #'.$calon['dosen_id']),
+                    $calon['kelompok'],
+                    $this->formatTanggalBentrok($calon['tanggal']),
+                    $calon['jam_mulai'],
+                    $calon['jam_selesai'],
+                    $tujuan,
+                    $this->formatJam($jadwal->jam_mulai),
+                    $this->formatJam($jadwal->jam_selesai),
+                ));
+            }
+        }
+
+        for ($i = 0; $i < $calonJadwal->count(); $i++) {
+            for ($j = $i + 1; $j < $calonJadwal->count(); $j++) {
+                $pertama = $calonJadwal[$i];
+                $kedua = $calonJadwal[$j];
+
+                if (
+                    $pertama['dosen_id'] !== $kedua['dosen_id']
+                    || $pertama['tanggal'] !== $kedua['tanggal']
+                    || ! $this->waktuBertabrakan(
+                        $pertama['jam_mulai'],
+                        $pertama['jam_selesai'],
+                        $kedua['jam_mulai'],
+                        $kedua['jam_selesai'],
+                    )
+                ) {
+                    continue;
+                }
+
+                $bentrok->push(sprintf(
+                    '%s: %s pukul %s-%s bertabrakan dengan %s pukul %s-%s pada %s.',
+                    $namaDosen->get($pertama['dosen_id'], 'Dosen #'.$pertama['dosen_id']),
+                    $pertama['kelompok'],
+                    $pertama['jam_mulai'],
+                    $pertama['jam_selesai'],
+                    $kedua['kelompok'],
+                    $kedua['jam_mulai'],
+                    $kedua['jam_selesai'],
+                    $this->formatTanggalBentrok($pertama['tanggal']),
+                ));
+            }
+        }
+
+        return $bentrok->unique()->values()->all();
+    }
+
+    private function waktuBertabrakan(string $mulaiPertama, string $selesaiPertama, string $mulaiKedua, string $selesaiKedua): bool
+    {
+        $mulaiPertama = substr($mulaiPertama, 0, 5);
+        $selesaiPertama = substr($selesaiPertama, 0, 5);
+        $mulaiKedua = substr($mulaiKedua, 0, 5);
+        $selesaiKedua = substr($selesaiKedua, 0, 5);
+
+        return $mulaiPertama < $selesaiKedua && $selesaiPertama > $mulaiKedua;
+    }
+
+    private function hashJadwalBentrok(array $payload, $kelompokIds): string
+    {
+        $jadwal = $kelompokIds->map(fn ($kelompokId) => [
+            'kelompok_id' => (int) $kelompokId,
+            'tanggal' => $payload['mapping_tanggal'][$kelompokId] ?? null,
+            'jam_mulai' => $payload['mapping_jam_mulai'][$kelompokId] ?? null,
+            'jam_selesai' => $payload['mapping_jam_selesai'][$kelompokId] ?? null,
+            'dosen_ids' => collect($payload['mapping_dosen_ids'][$kelompokId] ?? [])
+                ->map(fn ($id) => (int) $id)
+                ->unique()
+                ->sort()
+                ->values()
+                ->all(),
+        ])->values()->all();
+
+        return hash('sha256', json_encode($jadwal, JSON_THROW_ON_ERROR));
+    }
+
+    private function formatTanggalBentrok(string $tanggal): string
+    {
+        return date('d/m/Y', strtotime($tanggal));
     }
 
     public function deleteMapping(string $id): void
@@ -593,6 +799,9 @@ new class extends Component
                 ->with([
                     'kelompok_blok:id_kelompok_blok,kode,nama',
                     'dosen_pertemuan_blok.dosen:id_dosen,nama',
+                    'aturan_kegiatan_blok' => fn ($query) => $query
+                        ->select('id', 'bobot_sks')
+                        ->withCount('materi_rinci_blok'),
                 ])
                 ->orderBy('tanggal')
                 ->get()
@@ -732,7 +941,7 @@ new class extends Component
                                     @forelse ($materi->materi_rinci_blok as $rinci)
                                         @php($pertemuan = ($pertemuanPerMateri->get($rinci->id_materi_rinci_blok) ?? collect())->firstWhere('kelompok_blok_id', $kelompok->id_kelompok_blok))
                                         @php($jumlahLampiran = $pertemuan ? (int) ($lampiranPerPertemuan[$pertemuan->id_pertemuan_blok] ?? 0) : 0)
-                                        @php($dosenPengampu = $pertemuan?->dosen_pertemuan_blok->pluck('dosen.nama')->filter() ?? collect())
+                                        @php($dosenPengampu = $pertemuan?->dosen_pertemuan_blok->filter(fn ($pengampu) => $pengampu->dosen) ?? collect())
                                         <div class="border rounded p-3 mb-2 ms-md-3" wire:key="rinci-{{ $kelompok->id_kelompok_blok }}-{{ $rinci->id_materi_rinci_blok }}">
                                             <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
                                                 <div class="flex-grow-1">
@@ -748,9 +957,10 @@ new class extends Component
                                                         <div class="small fw-semibold text-muted mb-1">
                                                             <i class="ri-user-star-line"></i> Dosen Pengampu
                                                         </div>
-                                                        @forelse ($dosenPengampu as $namaDosen)
+                                                        @forelse ($dosenPengampu as $pengampu)
                                                             <span class="badge bg-success-subtle text-success border border-success-subtle me-1 mb-1">
-                                                                <i class="ri-user-line"></i> {{ $namaDosen }}
+                                                                <i class="ri-user-line"></i> {{ $pengampu->dosen->nama }}
+                                                                &middot; {{ number_format($pengampu->bobot_sks, 4, ',', '.') }} SKS
                                                             </span>
                                                         @empty
                                                             <span class="badge bg-warning-subtle text-warning border border-warning-subtle">
@@ -831,6 +1041,23 @@ new class extends Component
 
                         @error('mapping_dosen_ids') <div class="alert alert-danger py-2 alert-dismissible fade show" role="alert"><button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Tutup"></button>{{ $message }}</div> @enderror
                         @error('materi_rinci_blok_id') <div class="alert alert-danger py-2 alert-dismissible fade show" role="alert"><button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Tutup"></button>{{ $message }}</div> @enderror
+
+                        @if ($bentrok_jadwal !== [])
+                            <div class="alert alert-warning" role="alert">
+                                <div class="d-flex gap-2">
+                                    <i class="ri-error-warning-line fs-18"></i>
+                                    <div>
+                                        <div class="fw-semibold">Jadwal dosen bertabrakan</div>
+                                        <div class="small mb-2">Jadwal belum disimpan. Periksa bentrok berikut atau pilih <strong>Tetap Jadwalkan</strong> untuk memaksa penyimpanan.</div>
+                                        <ul class="mb-0 ps-3">
+                                            @foreach ($bentrok_jadwal as $bentrok)
+                                                <li>{{ $bentrok }}</li>
+                                            @endforeach
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        @endif
 
                         <div class="mb-3">
                             <label class="form-label">Cari Dosen Pengampu</label>
@@ -914,9 +1141,15 @@ new class extends Component
                 <div class="modal-footer">
                     <button type="button" class="btn btn-light" data-bs-dismiss="modal" wire:click="resetMapping">Batal</button>
                     @if ($materi_rinci_blok_id)
-                        <button type="submit" class="btn btn-primary" wire:loading.attr="disabled">
-                            <i class="ri-save-line"></i> SIMPAN
-                        </button>
+                        @if ($bentrok_jadwal !== [])
+                            <button type="button" class="btn btn-warning" wire:click="savePertemuan(true)" wire:loading.attr="disabled">
+                                <i class="ri-calendar-check-line"></i> TETAP JADWALKAN
+                            </button>
+                        @else
+                            <button type="submit" class="btn btn-primary" wire:loading.attr="disabled">
+                                <i class="ri-save-line"></i> SIMPAN
+                            </button>
+                        @endif
                     @endif
                 </div>
             </form>
