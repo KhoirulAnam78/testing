@@ -387,11 +387,17 @@ new class extends Component
             <span class="badge bg-light text-dark border">Total: {{ $anggota->count() }}</span>
         </div>
 
-        @if ($bolehIsi)
-            <button type="button" class="btn btn-secondary btn-sm" wire:click="semuaHadir">
-                <i class="ri-check-double-line"></i> Tandai Semua Hadir
-            </button>
-        @endif
+        <div class="d-flex flex-wrap gap-1">
+            <a class="btn btn-danger btn-sm"
+                href="{{ route('daftar-hadir-pertemuan.download', $pertemuan_blok_id) }}">
+                <i class="ri-file-pdf-2-line"></i> Export PDF
+            </a>
+            @if ($bolehIsi)
+                <button type="button" class="btn btn-secondary btn-sm" wire:click="semuaHadir">
+                    <i class="ri-check-double-line"></i> Tandai Semua Hadir
+                </button>
+            @endif
+        </div>
     </div>
 
     @if ($anggota->isEmpty())

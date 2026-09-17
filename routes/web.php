@@ -10,10 +10,15 @@
  */
 
 use App\Models\LogbookPertemuanBlok;
+use App\Models\PertemuanBlok;
+use App\Models\PesertaBlok;
 use App\Models\PresensiPertemuanBlok;
 use App\Support\AksesPertemuanBlok;
+use Dompdf\Dompdf;
+use Dompdf\Options;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 Route::view('/', 'welcome')->name('welcome');
 
@@ -114,6 +119,68 @@ Route::middleware(['auth', 'route.permission'])->group(function () {
             ]
         );
     })->name('surat-keterangan.download');
+
+    Route::get('pertemuan/{pertemuan}/daftar-hadir.pdf', function (PertemuanBlok $pertemuan) {
+        abort_unless(
+            AksesPertemuanBlok::bolehKelolaPertemuan(auth()->user(), (int) $pertemuan->id_pertemuan_blok),
+            403
+        );
+
+        $pertemuan->load([
+            'blok.semester',
+            'aturan_kegiatan_blok.jenis_kegiatan',
+            'materi_rinci_blok',
+            'kelompok_blok',
+            'dosen_pertemuan_blok.dosen',
+        ]);
+
+        $peserta = PesertaBlok::query()
+            ->select('peserta_blok.*')
+            ->join('anggota_kelompok_blok', 'anggota_kelompok_blok.peserta_blok_id', '=', 'peserta_blok.id_peserta_blok')
+            ->join('mahasiswa', 'mahasiswa.id_mahasiswa', '=', 'peserta_blok.mahasiswa_id')
+            ->where('anggota_kelompok_blok.kelompok_blok_id', $pertemuan->kelompok_blok_id)
+            ->whereIn('peserta_blok.status', ['aktif', 'mengulang'])
+            ->with([
+                'mahasiswa:id_mahasiswa,nim,nama',
+                'presensi_pertemuan_blok' => fn ($query) => $query
+                    ->where('pertemuan_blok_id', $pertemuan->id_pertemuan_blok)
+                    ->select('id_presensi_pertemuan_blok', 'peserta_blok_id', 'status', 'keterangan'),
+            ])
+            ->orderBy('mahasiswa.nama')
+            ->get();
+
+        $rekap = array_fill_keys([...PresensiPertemuanBlok::SEMUA_STATUS, 'belum_diisi'], 0);
+
+        foreach ($peserta as $item) {
+            $status = $item->presensi_pertemuan_blok->first()?->status ?? 'belum_diisi';
+            $rekap[$status]++;
+        }
+
+        $options = new Options;
+        $options->set('defaultFont', 'DejaVu Sans');
+        $options->set('isRemoteEnabled', false);
+
+        $pdf = new Dompdf($options);
+        $pdf->loadHtml(view('pdf.daftar-hadir-pertemuan', compact('pertemuan', 'peserta', 'rekap'))->render(), 'UTF-8');
+        $pdf->setPaper('A4', 'portrait');
+        $pdf->render();
+
+        $namaFile = Str::slug(implode('-', array_filter([
+            'daftar-hadir',
+            $pertemuan->blok?->kode,
+            $pertemuan->aturan_kegiatan_blok?->jenis_kegiatan?->nama,
+            $pertemuan->kelompok_blok?->kode,
+            $pertemuan->materi_rinci_blok?->pertemuan_ke
+                ? 'pertemuan-'.$pertemuan->materi_rinci_blok->pertemuan_ke
+                : 'sesi-'.$pertemuan->id_pertemuan_blok,
+        ]))).'.pdf';
+
+        return response($pdf->output(), 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="'.$namaFile.'"',
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
+    })->name('daftar-hadir-pertemuan.download');
 
     Route::get('logbook/{logbook}/download', function (LogbookPertemuanBlok $logbook) {
         abort_unless(
