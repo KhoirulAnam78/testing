@@ -3,7 +3,6 @@
 namespace App\Support;
 
 use App\Models\MateriRinciBlok;
-use App\Models\MonitoringPertemuanBlok;
 use App\Models\PertemuanBlok;
 use App\Models\User;
 
@@ -75,7 +74,10 @@ class AksesPertemuanBlok
     {
         return (int) ($user?->mahasiswa?->id_mahasiswa ?? 0) === $mahasiswaId
             && self::logbookAktif($pertemuanId)
-            && self::terkunci($pertemuanId)
+            && PertemuanBlok::query()
+                ->whereKey($pertemuanId)
+                ->whereHas('monitoring_pertemuan_blok')
+                ->exists()
             && self::mahasiswaAnggota($user, $pertemuanId);
     }
 
@@ -100,32 +102,11 @@ class AksesPertemuanBlok
                     && self::mahasiswaAnggota($user, $pertemuanId)));
     }
 
-    /**
-     * Jurnal yang sudah divalidasi mengunci presensi dan jurnal pertemuan itu.
-     * Tidak ada peran yang boleh mengubah selama terkunci; pengelola harus membuka
-     * validasinya lebih dulu supaya jejaknya jelas.
-     */
-    public static function terkunci(int $pertemuanId): bool
-    {
-        return MonitoringPertemuanBlok::query()
-            ->where('pertemuan_blok_id', $pertemuanId)
-            ->whereNotNull('divalidasi_pada')
-            ->exists();
-    }
-
     public static function bolehIsiPelaksanaan(?User $user, int $pertemuanId): bool
     {
-        return self::bolehKelolaPertemuan($user, $pertemuanId) && ! self::terkunci($pertemuanId);
+        return self::bolehKelolaPertemuan($user, $pertemuanId);
     }
 
-    /**
-     * Penilaian sengaja TIDAK ikut `terkunci()`.
-     *
-     * Validasi jurnal mengunci presensi dan jurnal karena keduanya adalah catatan
-     * pelaksanaan yang sudah final. Nilai berbeda: dosen pengampu sering baru selesai
-     * menilai setelah pertemuan divalidasi, dan koreksi nilai adalah pekerjaan normal.
-     * Jadi nilai tetap boleh diisi dosen pengampu dan pengelola tanpa membuka validasi.
-     */
     public static function bolehIsiNilai(?User $user, int $pertemuanId): bool
     {
         return self::bolehKelolaPertemuan($user, $pertemuanId)
@@ -141,11 +122,6 @@ class AksesPertemuanBlok
                 fn ($query) => $query->where('sumber_nilai', 'cbt')
             )
             ->exists();
-    }
-
-    public static function bolehBukaValidasi(?User $user, int $pertemuanId): bool
-    {
-        return self::pengelola($user) || self::pengelolaBlok($user, $pertemuanId);
     }
 
     /**

@@ -13,8 +13,8 @@ use Livewire\WithPagination;
 /**
  * Monitoring pelaksanaan perkuliahan satu blok.
  *
- * Sudut pandang pengelola: melihat pertemuan mana yang sudah dijurnal dan
- * divalidasi, lalu masuk ke presensi atau jurnal pertemuan itu
+ * Sudut pandang pengelola: melihat pertemuan mana yang sudah dijurnal, lalu masuk
+ * ke presensi atau jurnal pertemuan itu
  * memakai komponen yang sama dengan halaman dosen.
  *
  * Semua filter, urutan, dan paginasi dikerjakan di SQL karena satu blok bisa berisi
@@ -47,12 +47,6 @@ new class extends Component
     public string $pelaksanaan_mode = 'pelaksanaan';
 
     public string $pelaksanaan_judul = '';
-
-    public bool $validasi_setelah_simpan = false;
-
-    public bool $jurnal_tersimpan = false;
-
-    public bool $presensi_tersimpan = false;
 
     public function mount($blok_id): void
     {
@@ -98,9 +92,7 @@ new class extends Component
             ->when($this->status_pengisian === 'belum', fn ($query) => $query
                 ->whereDoesntHave('monitoring_pertemuan_blok'))
             ->when($this->status_pengisian === 'terisi', fn ($query) => $query
-                ->whereHas('monitoring_pertemuan_blok', fn ($jurnal) => $jurnal->whereNull('divalidasi_pada')))
-            ->when($this->status_pengisian === 'tervalidasi', fn ($query) => $query
-                ->whereHas('monitoring_pertemuan_blok', fn ($jurnal) => $jurnal->whereNotNull('divalidasi_pada')))
+                ->whereHas('monitoring_pertemuan_blok'))
             ->when($this->search !== '', function ($query) {
                 $search = '%'.$this->search.'%';
 
@@ -148,10 +140,6 @@ new class extends Component
 
         $dijurnal = $this->dasarQuery()->whereHas('monitoring_pertemuan_blok')->count();
 
-        $tervalidasi = $this->dasarQuery()
-            ->whereHas('monitoring_pertemuan_blok', fn ($jurnal) => $jurnal->whereNotNull('divalidasi_pada'))
-            ->count();
-
         // Persentase kehadiran dihitung dari baris presensi yang benar-benar tercatat,
         // bukan dari jumlah anggota kelompok, supaya pertemuan yang belum diisi tidak
         // menurunkan angkanya secara palsu.
@@ -167,7 +155,6 @@ new class extends Component
             'total' => $total,
             'dijurnal' => $dijurnal,
             'belum_dijurnal' => $total - $dijurnal,
-            'tervalidasi' => $tervalidasi,
             'presensi_tercatat' => $tercatat,
             'persen_hadir' => $tercatat > 0 ? round($hadir / $tercatat * 100, 1) : null,
         ];
@@ -227,7 +214,6 @@ new class extends Component
 
     public function tutupPelaksanaan(): void
     {
-        $this->resetStateSimpanPelaksanaan();
         $this->reset(['pelaksanaan_pertemuan_id', 'pelaksanaan_mode', 'pelaksanaan_judul']);
     }
 
@@ -239,23 +225,6 @@ new class extends Component
             403
         );
 
-        $this->resetStateSimpanPelaksanaan();
-        $this->dispatch(
-            'simpan-pelaksanaan',
-            pertemuan_blok_id: $this->pelaksanaan_pertemuan_id
-        );
-    }
-
-    public function validasiPelaksanaan(): void
-    {
-        abort_unless(
-            $this->pelaksanaan_pertemuan_id
-                && AksesPertemuanBlok::bolehIsiPelaksanaan(auth()->user(), $this->pelaksanaan_pertemuan_id),
-            403
-        );
-
-        $this->resetStateSimpanPelaksanaan();
-        $this->validasi_setelah_simpan = true;
         $this->dispatch(
             'simpan-pelaksanaan',
             pertemuan_blok_id: $this->pelaksanaan_pertemuan_id
@@ -263,38 +232,15 @@ new class extends Component
     }
 
     #[On('presensi-pertemuan-tersimpan')]
-    public function tandaiPresensiTersimpan(): void
+    public function refreshPresensi(): void
     {
-        $this->presensi_tersimpan = true;
-        $this->lanjutkanValidasi();
+        //
     }
 
     #[On('jurnal-pertemuan-tersimpan')]
-    public function tandaiJurnalTersimpan(): void
+    public function refreshJurnal(): void
     {
-        $this->jurnal_tersimpan = true;
-        $this->lanjutkanValidasi();
-    }
-
-    private function lanjutkanValidasi(): void
-    {
-        if (
-            $this->validasi_setelah_simpan
-            && $this->jurnal_tersimpan
-            && $this->presensi_tersimpan
-            && $this->pelaksanaan_pertemuan_id
-        ) {
-            $this->validasi_setelah_simpan = false;
-            $this->dispatch(
-                'validasi-pelaksanaan',
-                pertemuan_blok_id: $this->pelaksanaan_pertemuan_id
-            );
-        }
-    }
-
-    private function resetStateSimpanPelaksanaan(): void
-    {
-        $this->reset(['validasi_setelah_simpan', 'jurnal_tersimpan', 'presensi_tersimpan']);
+        //
     }
 
     #[On('nilai-pertemuan-tersimpan')]
@@ -337,8 +283,8 @@ new class extends Component
         <div class="col-6 col-lg-3">
             <div class="card mb-0">
                 <div class="card-body py-2">
-                    <div class="text-muted small">Tervalidasi</div>
-                    <div class="fs-5 fw-semibold text-success">{{ $ringkasan['tervalidasi'] }}</div>
+                    <div class="text-muted small">Sudah Diisi</div>
+                    <div class="fs-5 fw-semibold text-success">{{ $ringkasan['dijurnal'] }}</div>
                 </div>
             </div>
         </div>
@@ -364,8 +310,7 @@ new class extends Component
             <h5 class="mb-1">Monitoring Pertemuan</h5>
             <div class="text-muted small">
                 Pengelola dapat mengisi maupun mengoreksi presensi, nilai, dan catatan monitoring,
-                serta membuka kembali validasi yang keliru.
-                Nilai tidak terkunci oleh validasi, jadi masih bisa diperbaiki kapan saja.
+                termasuk data yang sudah pernah disimpan.
             </div>
         </div>
         <div class="card-body">
@@ -394,7 +339,6 @@ new class extends Component
                         <option value="">Semua status</option>
                         <option value="belum">Belum diisi</option>
                         <option value="terisi">Sudah diisi</option>
-                        <option value="tervalidasi">Tervalidasi</option>
                     </select>
                 </div>
                 <div class="col-md-3">
@@ -466,14 +410,8 @@ new class extends Component
                                     @php($jurnal = $item->monitoring_pertemuan_blok)
                                     @if (! $jurnal)
                                         <span class="badge bg-light text-dark border">belum diisi</span>
-                                    @elseif ($jurnal->divalidasi_pada)
-                                        <span class="badge bg-success-subtle text-success">
-                                            <i class="ri-shield-check-line"></i> Tervalidasi
-                                        </span>
-                                        <div class="small text-muted mt-1">{{ $jurnal->divalidasi_pada->format('d/m/Y') }}</div>
                                     @else
-                                        <span class="badge bg-info-subtle text-info">sudah diisi</span>
-                                        <div class="small text-muted mt-1">belum divalidasi</div>
+                                        <span class="badge bg-success-subtle text-success">sudah diisi</span>
                                     @endif
                                 </td>
                                 <td>
@@ -581,7 +519,6 @@ new class extends Component
                                 <livewire:blok-operasional.jurnal-pertemuan
                                     :pertemuan_blok_id="$pelaksanaan_pertemuan_id"
                                     :tampilkan_tombol_simpan="false"
-                                    :tampilkan_tombol_validasi="false"
                                     :key="'jurnal-monitoring-'.$pelaksanaan_pertemuan_id" />
                             </div>
 
@@ -598,15 +535,8 @@ new class extends Component
                                     <button type="button" class="btn btn-primary btn-sm"
                                         wire:click="simpanPelaksanaan"
                                         wire:loading.attr="disabled"
-                                        wire:target="simpanPelaksanaan,validasiPelaksanaan">
+                                        wire:target="simpanPelaksanaan">
                                         <i class="ri-save-line"></i> SIMPAN
-                                    </button>
-                                    <button type="button" class="btn btn-success btn-sm"
-                                        wire:click="validasiPelaksanaan"
-                                        wire:confirm="Validasi pertemuan ini? Presensi dan jurnal akan terkunci."
-                                        wire:loading.attr="disabled"
-                                        wire:target="simpanPelaksanaan,validasiPelaksanaan">
-                                        <i class="ri-shield-check-line"></i> SIMPAN & VALIDASI
                                     </button>
                                 </div>
                             @endif

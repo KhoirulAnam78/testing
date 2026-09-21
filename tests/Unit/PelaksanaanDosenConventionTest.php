@@ -28,7 +28,7 @@ class PelaksanaanDosenConventionTest extends TestCase
         $this->assertStringContainsString('<div class="small fw-semibold text-wrap">', $contents);
         $this->assertStringContainsString('<div class="text-muted small">Jadwal Rencana</div>', $jurnalContents);
         $this->assertStringContainsString("wire:click=\"kelolaPelaksanaan('{{ \$item->id_pertemuan_blok }}', 'pelaksanaan')\"", $contents);
-        $this->assertStringContainsString("{{ \$jurnal?->divalidasi_pada ? 'Lihat Monitoring' : 'Isi Monitoring' }}", $contents);
+        $this->assertStringContainsString("{{ \$jurnal ? 'Koreksi Monitoring' : 'Isi Monitoring' }}", $contents);
         $this->assertStringContainsString('class="btn btn-primary btn-sm"', $contents);
         $this->assertStringContainsString('class="btn btn-secondary btn-sm mt-1"', $contents);
         $this->assertStringContainsString("wire:click=\"kelolaPelaksanaan('{{ \$item->id_pertemuan_blok }}', 'nilai')\"", $contents);
@@ -44,13 +44,7 @@ class PelaksanaanDosenConventionTest extends TestCase
         $this->assertStringContainsString('<livewire:blok-operasional.presensi-pertemuan', $contents);
         $this->assertSame(2, substr_count($contents, ':tampilkan_tombol_simpan="false"'));
         $this->assertStringContainsString('wire:click="simpanPelaksanaan"', $contents);
-        $this->assertStringContainsString('wire:click="validasiPelaksanaan"', $contents);
-        $this->assertMatchesRegularExpression('/<div class="modal-footer">.*wire:click="simpanPelaksanaan".*wire:click="validasiPelaksanaan"/s', $contents);
-        $this->assertStringContainsString('$this->jurnal_tersimpan', $contents);
-        $this->assertStringContainsString('$this->presensi_tersimpan', $contents);
-        $this->assertMatchesRegularExpression(
-            '/validasi_setelah_simpan\s+&& \$this->jurnal_tersimpan\s+&& \$this->presensi_tersimpan/',
-            $contents
-        );
+        $this->assertStringNotContainsString('validasiPelaksanaan', $contents);
+        $this->assertStringNotContainsString('validasi_setelah_simpan', $contents);
     }
 }

@@ -101,11 +101,6 @@ new class extends Component
             ->get();
     }
 
-    public function terkunci(): bool
-    {
-        return AksesPertemuanBlok::terkunci($this->pertemuan_blok_id);
-    }
-
     public function bolehIsi(): bool
     {
         return AksesPertemuanBlok::bolehIsiPelaksanaan(auth()->user(), $this->pertemuan_blok_id);
@@ -338,7 +333,6 @@ new class extends Component
         return $this->view([
             'anggota' => $this->anggota(),
             'rekap' => $this->rekap(),
-            'terkunci' => $this->terkunci(),
             'bolehIsi' => $this->bolehIsi(),
             'perluPresensi' => (bool) ($pertemuan->aturan_kegiatan_blok?->perlu_presensi ?? true),
             'suratTersimpan' => PresensiPertemuanBlok::query()
@@ -360,14 +354,6 @@ new class extends Component
     <x-full-page-loading message="Memproses operasional blok..." />
     @php($label = ['hadir' => 'Hadir', 'sakit' => 'Sakit', 'izin' => 'Izin', 'alpa' => 'Alpa'])
     @php($warna = ['hadir' => 'success', 'sakit' => 'warning', 'izin' => 'info', 'alpa' => 'danger'])
-
-    @if ($terkunci)
-        <div class="alert alert-secondary py-2 alert-dismissible fade show" role="alert">
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Tutup"></button>
-            <i class="ri-lock-line"></i>
-            Pertemuan ini sudah divalidasi, presensi terkunci. Pengelola dapat membuka validasi dari tab Jurnal bila perlu koreksi.
-        </div>
-    @endif
 
     @if (! $perluPresensi)
         <div class="alert alert-warning py-2 alert-dismissible fade show" role="alert">

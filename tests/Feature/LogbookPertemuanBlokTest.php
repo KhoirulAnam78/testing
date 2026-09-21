@@ -33,7 +33,7 @@ class LogbookPertemuanBlokTest extends TestCase
             ->assertNotFound();
     }
 
-    public function test_monitoring_belum_divalidasi_menolak_unggahan(): void
+    public function test_jurnal_monitoring_belum_tersimpan_menolak_unggahan(): void
     {
         Storage::fake('local');
         $data = $this->fixture(true, false);
@@ -47,7 +47,7 @@ class LogbookPertemuanBlokTest extends TestCase
         ));
 
         Livewire::test('logbook-pertemuan', ['pertemuan_blok_id' => $data['pertemuan']])
-            ->assertSee('Logbook dapat diunggah setelah monitoring pertemuan divalidasi.')
+            ->assertSee('Logbook dapat diunggah setelah jurnal monitoring pertemuan disimpan.')
             ->set('file', UploadedFile::fake()->createWithContent('logbook.pdf', "%PDF-1.4\nuji"))
             ->call('unggah')
             ->assertForbidden();
@@ -219,7 +219,7 @@ class LogbookPertemuanBlokTest extends TestCase
         ]);
     }
 
-    private function fixture(bool $aktif = true, bool $monitoringTervalidasi = true): array
+    private function fixture(bool $aktif = true, bool $monitoringAda = true): array
     {
         $mahasiswaUser = User::factory()->create();
         $dosenUser = User::factory()->create();
@@ -301,13 +301,13 @@ class LogbookPertemuanBlokTest extends TestCase
             'dosen_id' => $dosen,
         ]);
 
-        DB::table('monitoring_pertemuan_blok')->insert([
-            'pertemuan_blok_id' => $pertemuan,
-            'divalidasi_pada' => $monitoringTervalidasi ? now() : null,
-            'divalidasi_oleh_user_id' => $monitoringTervalidasi ? $dosenUser->id : null,
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
+        if ($monitoringAda) {
+            DB::table('monitoring_pertemuan_blok')->insert([
+                'pertemuan_blok_id' => $pertemuan,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
 
         return [
             'blok' => $blok,
