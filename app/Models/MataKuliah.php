@@ -24,4 +24,9 @@ class MataKuliah extends Model
     {
         return $this->hasMany(Blok::class, 'mata_kuliah_id', 'id');
     }
+
+    public function kurikulum_mata_kuliah(): HasMany
+    {
+        return $this->hasMany(KurikulumMataKuliah::class, 'mata_kuliah_id', 'id');
+    }
 }

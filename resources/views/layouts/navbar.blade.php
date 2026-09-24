@@ -68,7 +68,7 @@ new class extends Component {
         </button>
     </div>
 
-    <div id="scrollbar">
+    <div id="scrollbar" data-simplebar>
         <div class="container-fluid">
             <div id="two-column-menu"></div>
 
@@ -110,7 +110,7 @@ new class extends Component {
                                 </a>
 
                                 <div class="collapse menu-dropdown {{ $isActiveGroup ? 'show' : '' }}"
-                                    id="{{ $collapseId }}">
+                                    id="{{ $collapseId }}" data-bs-parent="#navbar-nav">
                                     <ul class="nav nav-sm flex-column">
                                         @foreach ($m->childs_main_permission as $i)
                                             @if (auth()->user()->can($i->main_permission->name) || (in_array($i->route, ['blok-operasional.index', 'dpna-blok.index'], true) && $dapatKelolaBlok))

@@ -22,6 +22,8 @@ class DatabaseSeeder extends Seeder
             Role::findOrCreate($role);
         }
 
+        $this->call(SkalaNilaiSeeder::class);
+
         $prodi = [
             ['kode' => 'PSPD', 'nama' => 'Pendidikan Dokter', 'jenjang' => 'S1'],
             ['kode' => 'PROFESI', 'nama' => 'Profesi Dokter', 'jenjang' => 'Profesi'],

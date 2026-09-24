@@ -75,6 +75,16 @@ Route::middleware(['auth', 'route.permission'])->group(function () {
     Route::livewire('mata-kuliah/add-or-edit/{id}', 'pages::mata-kuliah.add_edit')
         ->name('mata-kuliah.add_edit');
 
+    Route::livewire('kurikulum', 'pages::kurikulum.index')
+        ->name('kurikulum.index');
+    Route::livewire('kurikulum/add-or-edit/{id}', 'pages::kurikulum.add_edit')
+        ->name('kurikulum.add_edit');
+
+    Route::livewire('skala-nilai', 'pages::skala-nilai.index')
+        ->name('skala-nilai.index');
+    Route::livewire('skala-nilai/add-or-edit/{id}', 'pages::skala-nilai.add_edit')
+        ->name('skala-nilai.add_edit');
+
     Route::livewire('blok', 'pages::blok.index')
         ->name('blok.index');
     Route::livewire('blok/add-or-edit/{id}', 'pages::blok.add_edit')
