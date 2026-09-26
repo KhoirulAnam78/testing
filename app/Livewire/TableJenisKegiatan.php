@@ -55,7 +55,6 @@ final class TableJenisKegiatan extends PowerGridComponent
             ->add('nama')
             ->add('jumlah_pertemuan_default')
             ->add('durasi_menit_default')
-            ->add('bobot_sks_per_pertemuan_label', fn ($row) => number_format((float) $row->bobot_sks_per_pertemuan, 4, ',', '.'))
             ->add('sumber_nilai_label', fn ($row) => $row->sumber_nilai === 'cbt'
                 ? '<span class="badge bg-info">CBT eksternal</span>'
                 : '<span class="badge bg-secondary">Manual</span>')
@@ -75,7 +74,6 @@ final class TableJenisKegiatan extends PowerGridComponent
             Column::make('Nama', 'nama')->searchable()->sortable(),
             Column::make('Pertemuan Default', 'jumlah_pertemuan_default')->sortable(),
             Column::make('Durasi Default', 'durasi_menit_default')->sortable(),
-            Column::make('Bobot SKS/Pertemuan', 'bobot_sks_per_pertemuan_label', 'bobot_sks_per_pertemuan')->sortable(),
             Column::make('Sumber Nilai', 'sumber_nilai_label', 'sumber_nilai')->sortable(),
             Column::make('Komponen Penilaian', 'komponen_penilaian'),
             Column::make('Status', 'status')->sortable(),

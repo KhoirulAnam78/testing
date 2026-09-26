@@ -170,7 +170,7 @@ new class extends Component
                 <button class="btn btn-primary btn-sm mt-2" type="submit">Unggah PDF</button>
             @elseif ((! $logbook || $logbook->status !== 'valid') && ! $bolehUnggah)
                 <div class="alert alert-info py-2 mt-2 mb-0">
-                    Logbook dapat diunggah setelah monitoring pertemuan divalidasi.
+                    Logbook dapat diunggah setelah jurnal monitoring pertemuan disimpan.
                 </div>
             @endif
         </form>

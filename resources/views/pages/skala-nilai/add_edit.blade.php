@@ -53,7 +53,6 @@ new #[Layout('layouts.app')] class extends Component
             'nilai_angka_max' => $item->nilai_angka_max,
             'nilai_huruf' => $item->nilai_huruf,
             'nilai_indeks' => $item->nilai_indeks,
-            'urutan_mutu' => $item->urutan_mutu,
             'lulus' => $item->lulus,
             'boleh_perbaikan' => $item->boleh_perbaikan,
         ])->values()->all();
@@ -62,7 +61,7 @@ new #[Layout('layouts.app')] class extends Component
     public function addDetail(): void
     {
         if (! $this->terpakai) {
-            $this->detail[] = ['id' => null, 'nilai_angka_min' => 0, 'nilai_angka_max' => 0, 'nilai_huruf' => '', 'nilai_indeks' => 0, 'urutan_mutu' => count($this->detail) + 1, 'lulus' => true, 'boleh_perbaikan' => false];
+            $this->detail[] = ['id' => null, 'nilai_angka_min' => 0, 'nilai_angka_max' => 0, 'nilai_huruf' => '', 'nilai_indeks' => 0, 'lulus' => true, 'boleh_perbaikan' => false];
         }
     }
 
@@ -93,7 +92,6 @@ new #[Layout('layouts.app')] class extends Component
             'detail.*.nilai_angka_max' => ['required', 'numeric', 'min:0', 'max:100', 'decimal:0,2'],
             'detail.*.nilai_huruf' => ['required', 'string', 'max:10'],
             'detail.*.nilai_indeks' => ['required', 'numeric', 'min:0', 'max:99.99', 'decimal:0,2'],
-            'detail.*.urutan_mutu' => ['required', 'integer', 'min:1'],
             'detail.*.lulus' => ['boolean'],
             'detail.*.boleh_perbaikan' => ['boolean'],
         ], [
@@ -152,10 +150,9 @@ new #[Layout('layouts.app')] class extends Component
     {
         $huruf = collect($detail)->pluck('nilai_huruf')->map(fn ($item) => Str::upper(trim($item)));
         $minimum = collect($detail)->pluck('nilai_angka_min')->map(fn ($item) => number_format((float) $item, 2, '.', ''));
-        $urutan = collect($detail)->pluck('urutan_mutu')->map(fn ($item) => (int) $item);
 
-        if ($huruf->duplicates()->isNotEmpty() || $minimum->duplicates()->isNotEmpty() || $urutan->duplicates()->isNotEmpty()) {
-            $this->addError('detail', 'Nilai minimum, huruf, dan urutan mutu tidak boleh duplikat.');
+        if ($huruf->duplicates()->isNotEmpty() || $minimum->duplicates()->isNotEmpty()) {
+            $this->addError('detail', 'Nilai minimum dan huruf tidak boleh duplikat.');
 
             return false;
         }
@@ -188,11 +185,11 @@ new #[Layout('layouts.app')] class extends Component
     private function isiDefault(): void
     {
         $this->detail = [
-            ['id' => null, 'nilai_angka_min' => 80, 'nilai_angka_max' => 100, 'nilai_huruf' => 'A', 'nilai_indeks' => 4, 'urutan_mutu' => 5, 'lulus' => true, 'boleh_perbaikan' => false],
-            ['id' => null, 'nilai_angka_min' => 70, 'nilai_angka_max' => 79.99, 'nilai_huruf' => 'B', 'nilai_indeks' => 3, 'urutan_mutu' => 4, 'lulus' => true, 'boleh_perbaikan' => false],
-            ['id' => null, 'nilai_angka_min' => 60, 'nilai_angka_max' => 69.99, 'nilai_huruf' => 'C', 'nilai_indeks' => 2, 'urutan_mutu' => 3, 'lulus' => true, 'boleh_perbaikan' => false],
-            ['id' => null, 'nilai_angka_min' => 50, 'nilai_angka_max' => 59.99, 'nilai_huruf' => 'D', 'nilai_indeks' => 1, 'urutan_mutu' => 2, 'lulus' => false, 'boleh_perbaikan' => true],
-            ['id' => null, 'nilai_angka_min' => 0, 'nilai_angka_max' => 49.99, 'nilai_huruf' => 'E', 'nilai_indeks' => 0, 'urutan_mutu' => 1, 'lulus' => false, 'boleh_perbaikan' => true],
+            ['id' => null, 'nilai_angka_min' => 80, 'nilai_angka_max' => 100, 'nilai_huruf' => 'A', 'nilai_indeks' => 4, 'lulus' => true, 'boleh_perbaikan' => false],
+            ['id' => null, 'nilai_angka_min' => 70, 'nilai_angka_max' => 79.99, 'nilai_huruf' => 'B', 'nilai_indeks' => 3, 'lulus' => true, 'boleh_perbaikan' => false],
+            ['id' => null, 'nilai_angka_min' => 60, 'nilai_angka_max' => 69.99, 'nilai_huruf' => 'C', 'nilai_indeks' => 2, 'lulus' => true, 'boleh_perbaikan' => false],
+            ['id' => null, 'nilai_angka_min' => 50, 'nilai_angka_max' => 59.99, 'nilai_huruf' => 'D', 'nilai_indeks' => 1, 'lulus' => false, 'boleh_perbaikan' => true],
+            ['id' => null, 'nilai_angka_min' => 0, 'nilai_angka_max' => 49.99, 'nilai_huruf' => 'E', 'nilai_indeks' => 0, 'lulus' => false, 'boleh_perbaikan' => true],
         ];
     }
 }; ?>
@@ -212,14 +209,13 @@ new #[Layout('layouts.app')] class extends Component
     <fieldset @disabled($terpakai)>
         <div class="card"><div class="card-header d-flex justify-content-between align-items-center"><div><h5 class="mb-0">Grade</h5><small class="text-muted">Rentang dua desimal, lengkap 0.00–100.00.</small></div><button type="button" class="btn btn-soft-primary btn-sm" wire:click="addDetail">Tambah Grade</button></div>
             <div class="card-body table-responsive">@error('detail') <div class="alert alert-danger">{{ $message }}</div> @enderror
-                <table class="table align-middle"><thead><tr><th>Min</th><th>Maks</th><th>Huruf</th><th>Indeks</th><th>Urutan Mutu</th><th>Lulus</th><th>Boleh Perbaikan</th><th></th></tr></thead><tbody>
+                <table class="table align-middle"><thead><tr><th>Min</th><th>Maks</th><th>Huruf</th><th>Indeks</th><th>Lulus</th><th>Boleh Perbaikan</th><th></th></tr></thead><tbody>
                 @foreach ($detail as $index => $baris)
                     <tr wire:key="grade-{{ $index }}">
                         <td><input type="number" step="0.01" class="form-control" wire:model="detail.{{ $index }}.nilai_angka_min">@error("detail.$index.nilai_angka_min") <small class="text-danger">{{ $message }}</small> @enderror</td>
                         <td><input type="number" step="0.01" class="form-control" wire:model="detail.{{ $index }}.nilai_angka_max">@error("detail.$index.nilai_angka_max") <small class="text-danger">{{ $message }}</small> @enderror</td>
                         <td><input class="form-control text-uppercase" wire:model="detail.{{ $index }}.nilai_huruf"></td>
                         <td><input type="number" step="0.01" class="form-control" wire:model="detail.{{ $index }}.nilai_indeks"></td>
-                        <td><input type="number" min="1" class="form-control" wire:model="detail.{{ $index }}.urutan_mutu"></td>
                         <td><input type="checkbox" class="form-check-input" wire:model="detail.{{ $index }}.lulus"></td>
                         <td><input type="checkbox" class="form-check-input" wire:model="detail.{{ $index }}.boleh_perbaikan"></td>
                         <td><button type="button" class="btn btn-danger btn-sm" wire:click="removeDetail({{ $index }})"><i class="ri-delete-bin-line"></i></button></td>

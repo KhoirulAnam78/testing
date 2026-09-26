@@ -249,7 +249,7 @@ new #[Layout('layouts.app')] class extends Component
         $user = auth()->user();
         $query = PertemuanBlok::query()
             ->with([
-                'blok:id,kode,nama',
+                'blok:id,nama',
                 'kelompok_blok:id_kelompok_blok,kode,nama',
                 'materi_rinci_blok:id_materi_rinci_blok,judul',
                 'aturan_kegiatan_blok.jenis_kegiatan:id,nama',
@@ -277,7 +277,7 @@ new #[Layout('layouts.app')] class extends Component
     private function agendaMahasiswa($query, $pesertaBlokIds): Collection
     {
         $pertemuan = $query->with([
-            'blok:id,kode,nama',
+            'blok:id,nama',
             'kelompok_blok:id_kelompok_blok,kode,nama',
             'materi_rinci_blok:id_materi_rinci_blok,judul',
             'aturan_kegiatan_blok.jenis_kegiatan:id,nama',
@@ -481,7 +481,7 @@ new #[Layout('layouts.app')] class extends Component
                                     <div class="d-flex gap-3 py-2 {{ ! $loop->last ? 'border-bottom' : '' }}" wire:key="detail-agenda-{{ $item->id_pertemuan_blok }}">
                                         <div>
                                             <h6 class="mb-1">{{ $item->materi_rinci_blok?->judul ?? $item->topik ?? 'Pertemuan blok' }}</h6>
-                                            <div class="text-muted small">{{ $item->blok?->kode }} - {{ $item->blok?->nama }} · {{ $item->kelompok_blok?->kode }}</div>
+                                            <div class="text-muted small">{{ $item->blok?->nama }} · {{ $item->kelompok_blok?->kode }}</div>
                                             @if ($jenisDashboard !== 'dosen' && ($pengampu = $item->dosen_pertemuan_blok->pluck('dosen.nama')->filter()->join(', ')))
                                                 <div class="text-muted small">Pengampu: {{ $pengampu }}</div>
                                             @endif
@@ -514,7 +514,7 @@ new #[Layout('layouts.app')] class extends Component
                             <div class="dashboard-agenda-date"><strong>{{ $item->tanggal->format('d') }}</strong><small>{{ $item->tanggal->translatedFormat('M') }}</small></div>
                             <div class="flex-grow-1">
                                 <h6 class="mb-1">{{ $item->materi_rinci_blok?->judul ?? $item->topik ?? 'Pertemuan blok' }}</h6>
-                                <div class="text-muted small">{{ $item->blok?->kode }} - {{ $item->blok?->nama }} · {{ $item->kelompok_blok?->kode }}</div>
+                                <div class="text-muted small">{{ $item->blok?->nama }} · {{ $item->kelompok_blok?->kode }}</div>
                                 @if ($pengampu = $item->dosen_pertemuan_blok->pluck('dosen.nama')->filter()->join(', '))
                                     <div class="text-muted small">Pengampu: {{ $pengampu }}</div>
                                 @endif

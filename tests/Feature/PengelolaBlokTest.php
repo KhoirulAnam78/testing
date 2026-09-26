@@ -142,7 +142,6 @@ class PengelolaBlokTest extends TestCase
         return Blok::create([
             'prodi_id' => $prodi->id_prodi,
             'semester_id' => $semester->id_semester,
-            'kode' => 'PB-'.str()->random(8),
             'nama' => 'Blok Pengelola',
             'sks' => 4,
         ]);

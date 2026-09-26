@@ -7,6 +7,7 @@ use App\Models\FinalisasiDpnaBlok;
 use App\Models\GrupDpnaBlok;
 use App\Support\FinalisasiDpnaBlokService;
 use App\Support\PerhitunganDpnaBlok;
+use App\Support\SinkronisasiNilaiCbtBlok;
 use Illuminate\Contracts\Encryption\DecryptException;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
@@ -14,19 +15,30 @@ use Livewire\Attributes\Layout;
 use Livewire\Attributes\Locked;
 use Livewire\Component;
 
-new #[Layout('layouts.app')] class extends Component {
+new #[Layout('layouts.app')] class extends Component
+{
     #[Locked]
     public int $blokId;
 
     public bool $kehadiranAktif = false;
+
     public string $bobotKehadiran = '0';
+
     public array $kegiatan = [];
+
     public array $grup = [];
+
     public bool $modeGrup = false;
+
     public ?int $grupDiedit = null;
+
     public ?int $pesertaTerpilih = null;
+
     public ?int $riwayatTerpilihId = null;
+
     public string $alasanBuka = '';
+
+    public array $hasilSinkronisasiCbt = [];
 
     public function mount(string $id): void
     {
@@ -433,6 +445,36 @@ new #[Layout('layouts.app')] class extends Component {
         $this->pesertaTerpilih = $this->pesertaTerpilih === $id ? null : $id;
     }
 
+    public function sinkronisasiNilaiCbt(): void
+    {
+        $blok = Blok::findOrFail($this->blokId);
+        abort_unless($blok->dapatDikelolaOleh(auth()->user()), 403);
+        abort_if($this->finalisasiAktif() !== null, 422, 'DPNA final harus dibuka kembali sebelum nilai CBT disinkronkan.');
+
+        try {
+            $this->hasilSinkronisasiCbt = app(SinkronisasiNilaiCbtBlok::class)->jalankan($blok->id);
+        } catch (Throwable $e) {
+            report($e);
+            $this->hasilSinkronisasiCbt = [
+                'blok_diperiksa' => 0,
+                'blok_diproses' => 0,
+                'nilai_disinkronkan' => 0,
+                'peserta_dilewati' => 0,
+                'ujian_dilewati' => 0,
+                'masalah' => [],
+                'error' => ['Sinkronisasi gagal dijalankan. Periksa konfigurasi dan koneksi database CBT.'],
+            ];
+        }
+
+        if ($this->hasilSinkronisasiCbt['error'] !== []) {
+            session()->flash('failed', 'Sinkronisasi nilai CBT selesai dengan error.');
+
+            return;
+        }
+
+        session()->flash('success', "{$this->hasilSinkronisasiCbt['nilai_disinkronkan']} nilai CBT berhasil disinkronkan.");
+    }
+
     public function finalisasiAktif(): ?FinalisasiDpnaBlok
     {
         return FinalisasiDpnaBlok::query()
@@ -735,11 +777,38 @@ new #[Layout('layouts.app')] class extends Component {
     </div>
 
     <div class="card">
-        <div class="card-header">
-            <h5 class="mb-1">Matriks DPNA</h5>
-            <div class="text-muted small">Klik mahasiswa untuk melihat nilai sumber. {{ $finalisasi ? 'Nilai berasal dari snapshot final.' : 'Nilai akhir hanya tampil jika semua sumber aktif lengkap.' }}</div>
+        <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <div>
+                <h5 class="mb-1">Matriks DPNA</h5>
+                <div class="text-muted small">Klik mahasiswa untuk melihat nilai sumber. {{ $finalisasi ? 'Nilai berasal dari snapshot final.' : 'Nilai akhir hanya tampil jika semua sumber aktif lengkap.' }}</div>
+            </div>
+            @if (! $finalisasi && $blok->status === 'aktif')
+                <button type="button" class="btn btn-soft-primary btn-sm" wire:click="sinkronisasiNilaiCbt"
+                    wire:confirm="Sinkronkan nilai CBT untuk blok ini? Nilai snapshot lokal yang valid akan diperbarui."
+                    wire:loading.attr="disabled" wire:target="sinkronisasiNilaiCbt">
+                    <span wire:loading.remove wire:target="sinkronisasiNilaiCbt"><i class="ri-refresh-line"></i> Sinkronisasi Nilai CBT</span>
+                    <span wire:loading wire:target="sinkronisasiNilaiCbt"><span class="spinner-border spinner-border-sm" aria-hidden="true"></span> Menyinkronkan...</span>
+                </button>
+            @endif
         </div>
         <div class="card-body p-0">
+            @if ($hasilSinkronisasiCbt !== [])
+                <div class="alert {{ $hasilSinkronisasiCbt['error'] === [] ? 'alert-info' : 'alert-danger' }} rounded-0 border-start-0 border-end-0 mb-0" role="alert">
+                    <div class="fw-semibold">Hasil Sinkronisasi CBT</div>
+                    <div>
+                        {{ $hasilSinkronisasiCbt['nilai_disinkronkan'] }} nilai disinkronkan,
+                        {{ $hasilSinkronisasiCbt['peserta_dilewati'] }} peserta dilewati,
+                        dan {{ $hasilSinkronisasiCbt['ujian_dilewati'] }} ujian dilewati.
+                    </div>
+                    @if ($hasilSinkronisasiCbt['masalah'] !== [] || $hasilSinkronisasiCbt['error'] !== [])
+                        <ul class="mb-0 mt-2">
+                            @foreach ([...$hasilSinkronisasiCbt['masalah'], ...$hasilSinkronisasiCbt['error']] as $pesan)
+                                <li>{{ $pesan }}</li>
+                            @endforeach
+                        </ul>
+                    @endif
+                </div>
+            @endif
             <div class="table-responsive">
                 <table class="table table-bordered table-hover align-middle mb-0">
                     <thead>

@@ -40,14 +40,12 @@ class TableBlokOperasionalTest extends TestCase
         Blok::create([
             'prodi_id' => $prodiA->id_prodi,
             'semester_id' => $semester->id_semester,
-            'kode' => 'BLOK-A',
             'nama' => 'Blok Ditampilkan',
             'sks' => 4,
         ]);
         Blok::create([
             'prodi_id' => $prodiB->id_prodi,
             'semester_id' => $semester->id_semester,
-            'kode' => 'BLOK-B',
             'nama' => 'Blok Disembunyikan',
             'sks' => 4,
         ]);
@@ -57,9 +55,8 @@ class TableBlokOperasionalTest extends TestCase
             ->assertSee('Blok Disembunyikan')
             ->assertSeeHtml('class="blok-card__header p-3"')
             ->assertSee('--blok-accent: var(--vz-primary);', false)
-            ->set('search', 'BLOK-A')
+            ->set('search', 'Ditampilkan')
             ->assertSee('Blok Ditampilkan')
-            ->assertDontSee('BLOK-A')
             ->assertDontSee('Blok Disembunyikan')
             ->set('search', '')
             ->set('prodiId', (string) $prodiB->id_prodi)
@@ -89,7 +86,6 @@ class TableBlokOperasionalTest extends TestCase
         $blokKelola = Blok::create([
             'prodi_id' => $prodi->id_prodi,
             'semester_id' => $semester->id_semester,
-            'kode' => 'BLOK-KELOLA',
             'nama' => 'Blok Dapat Dikelola',
             'sks' => 4,
         ]);
@@ -101,7 +97,6 @@ class TableBlokOperasionalTest extends TestCase
         Blok::create([
             'prodi_id' => $prodi->id_prodi,
             'semester_id' => $semester->id_semester,
-            'kode' => 'BLOK-LAIN',
             'nama' => 'Blok Dosen Lain',
             'sks' => 4,
         ]);
@@ -127,7 +122,6 @@ class TableBlokOperasionalTest extends TestCase
             Blok::create([
                 'prodi_id' => $prodi->id_prodi,
                 'semester_id' => $semester->id_semester,
-                'kode' => "BLOK-{$number}",
                 'nama' => "Blok {$number}",
                 'sks' => 4,
                 'tanggal_mulai' => now()->subDays($number),

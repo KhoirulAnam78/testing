@@ -66,12 +66,6 @@ new #[Layout('layouts.app')] class extends Component
 
     public bool $pelaksanaan_perlu_logbook = false;
 
-    public bool $validasi_setelah_simpan = false;
-
-    public bool $jurnal_tersimpan = false;
-
-    public bool $presensi_tersimpan = false;
-
     public function mount(): void
     {
         $this->pastikanAkses();
@@ -150,6 +144,7 @@ new #[Layout('layouts.app')] class extends Component
             ->leftJoin('aturan_kegiatan_blok as urut_kegiatan', 'urut_kegiatan.id', '=', 'pertemuan_blok.aturan_kegiatan_blok_id')
             ->leftJoin('jenis_kegiatan as urut_jenis', 'urut_jenis.id', '=', 'urut_kegiatan.jenis_kegiatan_id')
             ->leftJoin('materi_rinci_blok as urut_materi', 'urut_materi.id_materi_rinci_blok', '=', 'pertemuan_blok.materi_rinci_blok_id')
+            ->leftJoin('materi_blok as urut_materi_pokok', 'urut_materi_pokok.id_materi_blok', '=', 'urut_materi.materi_blok_id')
             ->leftJoin('kelompok_blok as urut_kelompok', 'urut_kelompok.id_kelompok_blok', '=', 'pertemuan_blok.kelompok_blok_id')
             ->whereHas('dosen_pertemuan_blok', fn ($query) => $query->where('dosen_id', $dosenId))
             ->when($this->semester_id !== '', fn ($query) => $query->whereHas(
@@ -161,21 +156,8 @@ new #[Layout('layouts.app')] class extends Component
                 'aturan_kegiatan_blok',
                 fn ($aturan) => $aturan->where('jenis_kegiatan_id', (int) $this->jenis_kegiatan_id)
             ))
-            ->when($this->status_monitoring === 'perlu_diisi', fn ($query) => $query->where(function ($status) {
-                $status->whereDoesntHave('monitoring_pertemuan_blok')
-                    ->orWhere(function ($presensi) {
-                        $presensi->whereHas('aturan_kegiatan_blok', fn ($aturan) => $aturan->where('perlu_presensi', true))
-                            ->whereDoesntHave('presensi_pertemuan_blok');
-                    });
-            }))
-            ->when($this->status_monitoring === 'belum_validasi', fn ($query) => $query->whereHas(
-                'monitoring_pertemuan_blok',
-                fn ($monitoring) => $monitoring->whereNull('divalidasi_pada')
-            ))
-            ->when($this->status_monitoring === 'tervalidasi', fn ($query) => $query->whereHas(
-                'monitoring_pertemuan_blok',
-                fn ($monitoring) => $monitoring->whereNotNull('divalidasi_pada')
-            ))
+            ->when($this->status_monitoring === 'belum', fn ($query) => $query->whereDoesntHave('monitoring_pertemuan_blok'))
+            ->when($this->status_monitoring === 'terisi', fn ($query) => $query->whereHas('monitoring_pertemuan_blok'))
             ->when(trim($this->search) !== '', function ($query) {
                 $search = '%'.trim($this->search).'%';
 
@@ -183,20 +165,20 @@ new #[Layout('layouts.app')] class extends Component
                     $inner->where('pertemuan_blok.topik', 'like', $search)
                         ->orWhere('pertemuan_blok.ruangan', 'like', $search)
                         ->orWhereHas('materi_rinci_blok', fn ($materi) => $materi->where('judul', 'like', $search))
+                        ->orWhereHas('materi_rinci_blok.materi_blok', fn ($materi) => $materi->where('judul', 'like', $search))
                         ->orWhereHas('kelompok_blok', fn ($kelompok) => $kelompok
                             ->where('kode', 'like', $search)
                             ->orWhere('nama', 'like', $search))
-                        ->orWhereHas('blok', fn ($blok) => $blok
-                            ->where('kode', 'like', $search)
-                            ->orWhere('nama', 'like', $search));
+                        ->orWhereHas('blok', fn ($blok) => $blok->where('nama', 'like', $search));
                 });
             })
             ->with([
-                'blok:id,kode,nama,semester_id',
+                'blok:id,nama,semester_id',
                 'kelompok_blok' => fn ($query) => $query
                     ->select('id_kelompok_blok', 'kode', 'nama')
                     ->withCount('anggota_kelompok_blok'),
-                'materi_rinci_blok:id_materi_rinci_blok,judul,pertemuan_ke',
+                'materi_rinci_blok:id_materi_rinci_blok,materi_blok_id,judul,pertemuan_ke',
+                'materi_rinci_blok.materi_blok:id_materi_blok,judul',
                 'aturan_kegiatan_blok' => fn ($query) => $query
                     ->select('id', 'jenis_kegiatan_id', 'bobot_sks', 'perlu_presensi', 'perlu_penilaian', 'perlu_logbook')
                     ->withCount(['komponen_penilaian_blok', 'materi_rinci_blok']),
@@ -210,14 +192,13 @@ new #[Layout('layouts.app')] class extends Component
                 'presensi_pertemuan_blok as presensi_tercatat_count',
                 'nilai_pertemuan_blok as nilai_tercatat_count',
             ])
-            ->orderBy('urut_blok.nama')
             ->orderBy('urut_jenis.nama')
+            ->orderBy('urut_kelompok.kode')
+            ->orderByRaw('urut_materi_pokok.urutan IS NULL')
+            ->orderBy('urut_materi_pokok.urutan')
             ->orderByRaw('urut_materi.pertemuan_ke IS NULL')
             ->orderBy('urut_materi.pertemuan_ke')
-            ->orderBy('urut_kelompok.kode')
-            ->orderByRaw('pertemuan_blok.tanggal IS NULL')
-            ->orderBy('pertemuan_blok.tanggal')
-            ->orderBy('pertemuan_blok.jam_mulai')
+            ->orderBy('urut_blok.nama')
             ->orderBy('pertemuan_blok.id_pertemuan_blok');
     }
 
@@ -302,7 +283,7 @@ new #[Layout('layouts.app')] class extends Component
             ->with([
                 'kelompok_blok:id_kelompok_blok,kode',
                 'materi_rinci_blok:id_materi_rinci_blok,judul,pertemuan_ke',
-                'blok:id,kode,nama',
+                'blok:id,nama',
                 'aturan_kegiatan_blok:id,jenis_kegiatan_id,perlu_penilaian,perlu_logbook',
                 'aturan_kegiatan_blok.jenis_kegiatan:id,nama,sumber_nilai',
             ])
@@ -331,7 +312,7 @@ new #[Layout('layouts.app')] class extends Component
             $pertemuan->materi_rinci_blok?->pertemuan_ke
                 ? 'Pertemuan '.$pertemuan->materi_rinci_blok->pertemuan_ke
                 : null,
-            $pertemuan->blok?->kode,
+            $pertemuan->blok?->nama,
             $pertemuan->kelompok_blok?->kode,
         ]));
         $this->pelaksanaan_jadwal = implode(' · ', array_filter([
@@ -356,7 +337,6 @@ new #[Layout('layouts.app')] class extends Component
 
     public function tutupPelaksanaan(): void
     {
-        $this->resetStateSimpanPelaksanaan();
         $this->reset([
             'pelaksanaan_pertemuan_id',
             'pelaksanaan_mode',
@@ -376,68 +356,18 @@ new #[Layout('layouts.app')] class extends Component
             403
         );
 
-        $this->resetStateSimpanPelaksanaan();
         $this->dispatch(
             'simpan-pelaksanaan',
             pertemuan_blok_id: $this->pelaksanaan_pertemuan_id
         );
-    }
-
-    public function validasiPelaksanaan(): void
-    {
-        abort_unless(
-            $this->pelaksanaan_pertemuan_id
-                && AksesPertemuanBlok::bolehIsiPelaksanaan(auth()->user(), $this->pelaksanaan_pertemuan_id),
-            403
-        );
-
-        $this->resetStateSimpanPelaksanaan();
-        $this->validasi_setelah_simpan = true;
-        $this->dispatch(
-            'simpan-pelaksanaan',
-            pertemuan_blok_id: $this->pelaksanaan_pertemuan_id
-        );
-    }
-
-    #[On('presensi-pertemuan-tersimpan')]
-    public function tandaiPresensiTersimpan(): void
-    {
-        $this->presensi_tersimpan = true;
-        $this->lanjutkanValidasi();
-    }
-
-    #[On('jurnal-pertemuan-tersimpan')]
-    public function tandaiJurnalTersimpan(): void
-    {
-        $this->jurnal_tersimpan = true;
-        $this->lanjutkanValidasi();
-    }
-
-    private function lanjutkanValidasi(): void
-    {
-        if (
-            $this->validasi_setelah_simpan
-            && $this->jurnal_tersimpan
-            && $this->presensi_tersimpan
-            && $this->pelaksanaan_pertemuan_id
-        ) {
-            $this->validasi_setelah_simpan = false;
-            $this->dispatch(
-                'validasi-pelaksanaan',
-                pertemuan_blok_id: $this->pelaksanaan_pertemuan_id
-            );
-        }
-    }
-
-    private function resetStateSimpanPelaksanaan(): void
-    {
-        $this->reset(['validasi_setelah_simpan', 'jurnal_tersimpan', 'presensi_tersimpan']);
     }
 
     /**
-     * Badge hadir/total dan status validasi dihitung di query, jadi halaman perlu
+     * Badge hadir/total dan status pengisian dihitung di query, jadi halaman perlu
      * ikut segar setiap presensi, jurnal, atau nilai disimpan.
      */
+    #[On('presensi-pertemuan-tersimpan')]
+    #[On('jurnal-pertemuan-tersimpan')]
     #[On('nilai-pertemuan-tersimpan')]
     public function refreshPelaksanaan(): void
     {
@@ -498,7 +428,7 @@ new #[Layout('layouts.app')] class extends Component
                             <select class="form-select" wire:model.live="blok_id">
                                 <option value="">Semua blok</option>
                                 @foreach ($blokOptions as $blok)
-                                    <option value="{{ $blok->id }}">{{ $blok->kode }} - {{ $blok->nama }}</option>
+                                    <option value="{{ $blok->id }}">{{ $blok->nama }}</option>
                                 @endforeach
                             </select>
                         </div>
@@ -515,9 +445,8 @@ new #[Layout('layouts.app')] class extends Component
                             <label class="form-label">Status Monitoring</label>
                             <select class="form-select" wire:model.live="status_monitoring">
                                 <option value="">Semua status</option>
-                                <option value="perlu_diisi">Perlu diisi</option>
-                                <option value="belum_validasi">Belum divalidasi</option>
-                                <option value="tervalidasi">Tervalidasi</option>
+                                <option value="belum">Belum diisi</option>
+                                <option value="terisi">Sudah diisi</option>
                             </select>
                         </div>
                         <div class="col-12">
@@ -568,13 +497,18 @@ new #[Layout('layouts.app')] class extends Component
                                         </td>
                                         <td>
                                             <div class="d-flex flex-column align-items-start gap-1">
-                                                @if ($item->materi_rinci_blok?->pertemuan_ke)
-                                                    <span class="badge bg-light text-dark border">Pertemuan {{ $item->materi_rinci_blok->pertemuan_ke }}</span>
+                                                @if ($item->materi_rinci_blok?->materi_blok)
+                                                    <span class="badge bg-primary-subtle text-primary text-wrap text-start">
+                                                        {{ $item->materi_rinci_blok->materi_blok->judul }}
+                                                    </span>
                                                 @endif
-                                                <div class="small fw-semibold text-wrap">
+                                                @if ($item->materi_rinci_blok?->pertemuan_ke)
+                                                    <div class="small fw-semibold">Pertemuan Ke {{ $item->materi_rinci_blok->pertemuan_ke }}</div>
+                                                @endif
+                                                <div class="small text-muted text-wrap">
                                                     {{ $item->materi_rinci_blok?->judul ?: $item->topik }}
                                                 </div>
-                                                <div class="text-muted small">{{ $item->blok?->kode }} · {{ $item->blok?->nama }}</div>
+                                                <div class="text-muted small">{{ $item->blok?->nama }}</div>
                                             </div>
                                         </td>
                                         <td>
@@ -599,10 +533,8 @@ new #[Layout('layouts.app')] class extends Component
                                                 <span>Monitoring</span>
                                                 @if (! $jurnal)
                                                     <span class="badge bg-warning-subtle text-warning">belum diisi</span>
-                                                @elseif ($jurnal->divalidasi_pada)
-                                                    <span class="badge bg-success-subtle text-success">tervalidasi</span>
                                                 @else
-                                                    <span class="badge bg-info-subtle text-info">belum divalidasi</span>
+                                                    <span class="badge bg-info-subtle text-info">sudah diisi</span>
                                                 @endif
                                             </div>
                                             <div class="d-flex justify-content-between gap-3 small mb-1">
@@ -636,31 +568,33 @@ new #[Layout('layouts.app')] class extends Component
                                                 @endif
                                             </div>
                                         </td>
-                                        <td class="text-end">
-                                            <button type="button" class="btn btn-primary btn-sm"
-                                                wire:click="kelolaModul('{{ $item->id_pertemuan_blok }}')">
-                                                <i class="ri-links-line"></i> Modul
-                                                @if ($item->lampiran_materi_blok_count > 0)
-                                                    <span class="badge bg-light text-primary ms-1"
-                                                        title="tautan khusus kelompok ini">{{ $item->lampiran_materi_blok_count }}</span>
+                                        <td>
+                                            <div class="d-grid gap-1" style="grid-template-columns: repeat(2, minmax(100px, 1fr)); min-width: 210px;">
+                                                <button type="button" class="btn btn-primary btn-sm text-nowrap"
+                                                    wire:click="kelolaModul('{{ $item->id_pertemuan_blok }}')">
+                                                    <i class="ri-links-line"></i> Modul
+                                                    @if ($item->lampiran_materi_blok_count > 0)
+                                                        <span class="badge bg-light text-primary ms-1"
+                                                            title="tautan khusus kelompok ini">{{ $item->lampiran_materi_blok_count }}</span>
+                                                    @endif
+                                                </button>
+                                                <button type="button" class="btn btn-secondary btn-sm text-nowrap"
+                                                    wire:click="kelolaPelaksanaan('{{ $item->id_pertemuan_blok }}', 'pelaksanaan')">
+                                                    <i class="ri-booklet-line"></i> Monitoring
+                                                </button>
+                                                @if ($item->aturan_kegiatan_blok?->perlu_penilaian && $item->aturan_kegiatan_blok?->jenis_kegiatan?->sumber_nilai !== 'cbt')
+                                                    <button type="button" class="btn btn-info btn-sm text-nowrap"
+                                                        wire:click="kelolaPelaksanaan('{{ $item->id_pertemuan_blok }}', 'nilai')">
+                                                        <i class="ri-graduation-cap-line"></i> Nilai
+                                                    </button>
                                                 @endif
-                                            </button>
-                                            <button type="button" class="btn btn-secondary btn-sm mt-1"
-                                                wire:click="kelolaPelaksanaan('{{ $item->id_pertemuan_blok }}', 'pelaksanaan')">
-                                                <i class="ri-booklet-line"></i> {{ $jurnal?->divalidasi_pada ? 'Lihat Monitoring' : 'Isi Monitoring' }}
-                                            </button>
-                                            @if ($item->aturan_kegiatan_blok?->perlu_penilaian && $item->aturan_kegiatan_blok?->jenis_kegiatan?->sumber_nilai !== 'cbt')
-                                                <button type="button" class="btn btn-info btn-sm mt-1"
-                                                    wire:click="kelolaPelaksanaan('{{ $item->id_pertemuan_blok }}', 'nilai')">
-                                                    <i class="ri-graduation-cap-line"></i> Nilai
-                                                </button>
-                                            @endif
-                                            @if ($item->aturan_kegiatan_blok?->perlu_logbook)
-                                                <button type="button" class="btn btn-warning btn-sm mt-1"
-                                                    wire:click="kelolaPelaksanaan('{{ $item->id_pertemuan_blok }}', 'logbook')">
-                                                    <i class="ri-file-list-3-line"></i> Logbook
-                                                </button>
-                                            @endif
+                                                @if ($item->aturan_kegiatan_blok?->perlu_logbook)
+                                                    <button type="button" class="btn btn-warning btn-sm text-nowrap"
+                                                        wire:click="kelolaPelaksanaan('{{ $item->id_pertemuan_blok }}', 'logbook')">
+                                                        <i class="ri-file-list-3-line"></i> Logbook
+                                                    </button>
+                                                @endif
+                                            </div>
                                         </td>
                                     </tr>
                                 @empty
@@ -770,7 +704,6 @@ new #[Layout('layouts.app')] class extends Component
                                 <livewire:blok-operasional.jurnal-pertemuan
                                     :pertemuan_blok_id="$pelaksanaan_pertemuan_id"
                                     :tampilkan_tombol_simpan="false"
-                                    :tampilkan_tombol_validasi="false"
                                     :key="'jurnal-saya-'.$pelaksanaan_pertemuan_id" />
                             </div>
 
@@ -795,15 +728,8 @@ new #[Layout('layouts.app')] class extends Component
                         <button type="button" class="btn btn-primary"
                             wire:click="simpanPelaksanaan"
                             wire:loading.attr="disabled"
-                            wire:target="simpanPelaksanaan,validasiPelaksanaan">
+                            wire:target="simpanPelaksanaan">
                             <i class="ri-save-line"></i> Simpan
-                        </button>
-                        <button type="button" class="btn btn-success"
-                            wire:click="validasiPelaksanaan"
-                            wire:confirm="Validasi pertemuan ini? Presensi dan monitoring akan terkunci dan tidak dapat diubah lagi."
-                            wire:loading.attr="disabled"
-                            wire:target="simpanPelaksanaan,validasiPelaksanaan">
-                            <i class="ri-shield-check-line"></i> Simpan &amp; Validasi
                         </button>
                     @endif
                 </div>

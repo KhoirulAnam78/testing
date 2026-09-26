@@ -7,6 +7,7 @@ use App\Support\AksesPertemuanBlok;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\Rule;
 use Livewire\Attributes\On;
 use Livewire\Component;
 use Livewire\WithFileUploads;
@@ -101,11 +102,6 @@ new class extends Component
             ->get();
     }
 
-    public function terkunci(): bool
-    {
-        return AksesPertemuanBlok::terkunci($this->pertemuan_blok_id);
-    }
-
     public function bolehIsi(): bool
     {
         return AksesPertemuanBlok::bolehIsiPelaksanaan(auth()->user(), $this->pertemuan_blok_id);
@@ -119,7 +115,7 @@ new class extends Component
 
         $this->status[$pesertaId] = $status;
 
-        if (! in_array($status, ['sakit', 'izin'], true)) {
+        if ($status === 'hadir') {
             unset($this->surat[$pesertaId]);
         }
 
@@ -185,7 +181,7 @@ new class extends Component
         abort_unless($this->bolehIsi(), 403);
 
         $this->validate([
-            'status.*' => ['required', 'in:hadir,sakit,izin,alpa'],
+            'status.*' => ['required', Rule::in(PresensiPertemuanBlok::SEMUA_STATUS)],
             'keterangan.*' => ['nullable', 'string', 'max:255'],
             'surat.*' => ['nullable', 'file', 'mimetypes:application/pdf,image/jpeg,image/png', 'mimes:pdf,jpg,jpeg,png', 'max:5120'],
         ], [
@@ -211,8 +207,8 @@ new class extends Component
 
         foreach ($anggota as $peserta) {
             $id = $peserta->id_peserta_blok;
-            if (isset($this->surat[$id]) && ! in_array($this->status[$id] ?? 'hadir', ['sakit', 'izin'], true)) {
-                $this->addError("surat.{$id}", 'Surat keterangan hanya dapat diunggah untuk status Sakit atau Izin.');
+            if (isset($this->surat[$id]) && ($this->status[$id] ?? 'hadir') === 'hadir') {
+                $this->addError("surat.{$id}", 'Surat keterangan hanya dapat diunggah untuk status selain Hadir.');
             }
             if (isset($this->surat[$id]) && mb_strlen($this->surat[$id]->getClientOriginalName()) > 255) {
                 $this->addError("surat.{$id}", 'Nama file surat keterangan maksimal 255 karakter.');
@@ -272,7 +268,7 @@ new class extends Component
                         if ($lama?->path_surat_keterangan) {
                             $fileLamaDihapus[] = $lama->path_surat_keterangan;
                         }
-                    } elseif (! in_array($status, ['sakit', 'izin'], true)) {
+                    } elseif ($status === 'hadir') {
                         $dataSurat = [
                             'path_surat_keterangan' => null,
                             'nama_file_surat_keterangan' => null,
@@ -338,7 +334,6 @@ new class extends Component
         return $this->view([
             'anggota' => $this->anggota(),
             'rekap' => $this->rekap(),
-            'terkunci' => $this->terkunci(),
             'bolehIsi' => $this->bolehIsi(),
             'perluPresensi' => (bool) ($pertemuan->aturan_kegiatan_blok?->perlu_presensi ?? true),
             'suratTersimpan' => PresensiPertemuanBlok::query()
@@ -358,16 +353,7 @@ new class extends Component
 
 <div>
     <x-full-page-loading message="Memproses operasional blok..." />
-    @php($label = ['hadir' => 'Hadir', 'sakit' => 'Sakit', 'izin' => 'Izin', 'alpa' => 'Alpa'])
-    @php($warna = ['hadir' => 'success', 'sakit' => 'warning', 'izin' => 'info', 'alpa' => 'danger'])
-
-    @if ($terkunci)
-        <div class="alert alert-secondary py-2 alert-dismissible fade show" role="alert">
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Tutup"></button>
-            <i class="ri-lock-line"></i>
-            Pertemuan ini sudah divalidasi, presensi terkunci. Pengelola dapat membuka validasi dari tab Jurnal bila perlu koreksi.
-        </div>
-    @endif
+    @php($statusMeta = PresensiPertemuanBlok::STATUS)
 
     @if (! $perluPresensi)
         <div class="alert alert-warning py-2 alert-dismissible fade show" role="alert">
@@ -379,9 +365,10 @@ new class extends Component
 
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
         <div class="d-flex flex-wrap gap-1">
-            @foreach ($label as $kunci => $teks)
-                <span class="badge bg-{{ $warna[$kunci] }}-subtle text-{{ $warna[$kunci] }}">
-                    {{ $teks }}: {{ $rekap[$kunci] }}
+            @foreach ($statusMeta as $kunci => $meta)
+                <span class="badge bg-{{ $meta['warna'] }}-subtle text-{{ $meta['warna'] }}"
+                    title="{{ $meta['deskripsi'] }}">
+                    {{ $meta['kode'] }} · {{ $meta['label'] }}: {{ $rekap[$kunci] }}
                 </span>
             @endforeach
             <span class="badge bg-light text-dark border">Total: {{ $anggota->count() }}</span>
@@ -414,7 +401,11 @@ new class extends Component
                         <tr>
                             <th style="width: 40px;">#</th>
                             <th>Mahasiswa</th>
-                            <th>Kehadiran</th>
+                            @foreach ($statusMeta as $meta)
+                                <th class="text-center" title="{{ $meta['deskripsi'] }}">
+                                    {{ $meta['label'] }}
+                                </th>
+                            @endforeach
                             <th>Keterangan</th>
                             <th>Surat Keterangan</th>
                         </tr>
@@ -428,25 +419,20 @@ new class extends Component
                                 <td>
                                     <div class="small fw-semibold">{{ $peserta->mahasiswa?->nama }}</div>
                                     <div class="text-muted small">{{ $peserta->mahasiswa?->nim }}</div>
-                                </td>
-                                <td>
-                                    @if ($bolehIsi)
-                                        <div class="btn-group btn-group-sm" role="group">
-                                            @foreach ($label as $kunci => $teks)
-                                                <button type="button"
-                                                    class="btn btn-sm {{ $statusAktif === $kunci ? 'btn-'.$warna[$kunci] : 'btn-light' }}"
-                                                    wire:click="setStatus('{{ $id }}', '{{ $kunci }}')">
-                                                    {{ $teks }}
-                                                </button>
-                                            @endforeach
-                                        </div>
-                                    @else
-                                        <span class="badge bg-{{ $warna[$statusAktif] }}-subtle text-{{ $warna[$statusAktif] }}">
-                                            {{ $label[$statusAktif] ?? $statusAktif }}
-                                        </span>
-                                    @endif
                                     @error('status.'.$id) <div class="small text-danger mt-1">{{ $message }}</div> @enderror
                                 </td>
+                                @foreach ($statusMeta as $kunci => $meta)
+                                    <td class="text-center">
+                                        <input class="form-check-input float-none m-0" type="radio"
+                                            name="status-{{ $id }}"
+                                            id="status-{{ $id }}-{{ $kunci }}"
+                                            value="{{ $kunci }}"
+                                            aria-label="{{ $meta['label'] }} untuk {{ $peserta->mahasiswa?->nama }}"
+                                            title="{{ $meta['deskripsi'] }}"
+                                            @if ($bolehIsi) wire:change="setStatus('{{ $id }}', '{{ $kunci }}')" @else disabled @endif
+                                            @checked($statusAktif === $kunci)>
+                                    </td>
+                                @endforeach
                                 <td style="min-width: 200px;">
                                     @if ($bolehIsi && $statusAktif !== 'hadir')
                                         <input type="text" class="form-control form-control-sm"
@@ -461,7 +447,7 @@ new class extends Component
                                 </td>
                                 <td style="min-width: 240px;">
                                     @php($suratAda = $suratTersimpan->get($id))
-                                    @if (in_array($statusAktif, ['sakit', 'izin'], true))
+                                    @if ($statusAktif !== 'hadir')
                                         @if ($suratAda)
                                             <div class="small text-truncate" style="max-width: 260px;" title="{{ $suratAda->nama_file_surat_keterangan }}">
                                                 <i class="ri-attachment-2"></i> {{ $suratAda->nama_file_surat_keterangan }}

@@ -2,27 +2,22 @@
 
 use App\Models\MonitoringPertemuanBlok;
 use App\Models\PertemuanBlok;
-use App\Models\PresensiPertemuanBlok;
 use App\Support\AksesPertemuanBlok;
 use Illuminate\Support\Facades\DB;
 use Livewire\Attributes\On;
 use Livewire\Component;
 
 /**
- * Jurnal pelaksanaan satu pertemuan, sekaligus gerbang validasinya.
+ * Jurnal pelaksanaan satu pertemuan.
  *
  * Jadwal realisasi diprefill dari jadwal rencana pertemuan supaya dosen hanya perlu
  * mengubah bila pelaksanaannya bergeser. Status pelaksanaan disimpan sebagai
  * `terlaksana` untuk kompatibilitas data lama, tanpa input status dari pengguna.
- *
- * Setelah divalidasi, presensi dan jurnal terkunci untuk semua peran. Pengelola harus
- * membuka validasi lebih dulu supaya koreksi meninggalkan jejak.
  */
 new class extends Component
 {
     public int $pertemuan_blok_id;
     public bool $tampilkan_tombol_simpan = true;
-    public bool $tampilkan_tombol_validasi = true;
 
     public ?string $tanggal_realisasi = null;
     public ?string $jam_mulai_realisasi = null;
@@ -64,8 +59,6 @@ new class extends Component
         return PertemuanBlok::query()
             ->with([
                 'monitoring_pertemuan_blok',
-                'monitoring_pertemuan_blok.divalidasi_oleh:id,name',
-                'aturan_kegiatan_blok:id,perlu_presensi',
                 'materi_rinci_blok:id_materi_rinci_blok,judul',
             ])
             ->findOrFail($this->pertemuan_blok_id);
@@ -76,24 +69,14 @@ new class extends Component
         return $jam ? substr($jam, 0, 5) : null;
     }
 
-    public function terkunci(): bool
-    {
-        return AksesPertemuanBlok::terkunci($this->pertemuan_blok_id);
-    }
-
     public function bolehIsi(): bool
     {
         return AksesPertemuanBlok::bolehIsiPelaksanaan(auth()->user(), $this->pertemuan_blok_id);
     }
 
-    public function bolehBukaValidasi(): bool
-    {
-        return AksesPertemuanBlok::bolehBukaValidasi(auth()->user(), $this->pertemuan_blok_id);
-    }
-
     public function simpan(): void
     {
-        $this->tulisJurnal(validasi: false);
+        $this->tulisJurnal();
     }
 
     #[On('simpan-pelaksanaan')]
@@ -104,20 +87,7 @@ new class extends Component
         }
     }
 
-    #[On('validasi-pelaksanaan')]
-    public function validasiDariPelaksanaan(int $pertemuan_blok_id): void
-    {
-        if ($pertemuan_blok_id === $this->pertemuan_blok_id) {
-            $this->validasi();
-        }
-    }
-
-    public function validasi(): void
-    {
-        $this->tulisJurnal(validasi: true);
-    }
-
-    private function tulisJurnal(bool $validasi): void
+    private function tulisJurnal(): void
     {
         abort_unless($this->bolehIsi(), 403);
 
@@ -138,13 +108,13 @@ new class extends Component
             'kendala.max' => 'Kendala maksimal 2000 karakter.',
         ]);
 
-        if (! $this->lolosAturanDomain($data, $validasi)) {
+        if (! $this->lolosAturanDomain($data)) {
             return;
         }
 
         $pertemuan = $this->pertemuan();
 
-        DB::transaction(function () use ($data, $validasi, $pertemuan) {
+        DB::transaction(function () use ($data, $pertemuan) {
             $muatan = [
                 'status_pelaksanaan' => 'terlaksana',
                 'tanggal_realisasi' => $data['tanggal_realisasi'] ?: null,
@@ -155,11 +125,6 @@ new class extends Component
                 'kendala' => trim((string) $data['kendala']) ?: null,
                 'diisi_oleh_user_id' => auth()->id(),
             ];
-
-            if ($validasi) {
-                $muatan['divalidasi_pada'] = now();
-                $muatan['divalidasi_oleh_user_id'] = auth()->id();
-            }
 
             MonitoringPertemuanBlok::updateOrCreate(
                 ['pertemuan_blok_id' => $this->pertemuan_blok_id],
@@ -174,9 +139,7 @@ new class extends Component
         $this->dispatch('jurnal-pertemuan-tersimpan');
         $this->dispatch('notify', message: [
             'status' => 'success',
-            'message' => $validasi
-                ? 'Monitoring pelaksanaan divalidasi. Presensi dan catatan monitoring pertemuan ini terkunci.'
-                : 'Monitoring pelaksanaan berhasil disimpan.',
+            'message' => 'Monitoring pelaksanaan berhasil disimpan.',
         ]);
     }
 
@@ -186,7 +149,7 @@ new class extends Component
      *
      * @param  array<string, mixed>  $data
      */
-    private function lolosAturanDomain(array $data, bool $validasi): bool
+    private function lolosAturanDomain(array $data): bool
     {
         if ($data['jam_selesai_realisasi'] && ! $data['jam_mulai_realisasi']) {
             $this->addError('jam_mulai_realisasi', 'Jam mulai wajib diisi bila jam selesai diisi.');
@@ -203,44 +166,7 @@ new class extends Component
             return false;
         }
 
-        // Validasi mengunci presensi, jadi pastikan presensi sudah tercatat.
-        if ($validasi && $this->perluPresensi()) {
-            $adaPresensi = PresensiPertemuanBlok::query()
-                ->where('pertemuan_blok_id', $this->pertemuan_blok_id)
-                ->exists();
-
-            if (! $adaPresensi) {
-                $this->addError('tanggal_realisasi', 'Isi presensi terlebih dahulu sebelum memvalidasi pertemuan.');
-
-                return false;
-            }
-        }
-
         return true;
-    }
-
-    public function bukaValidasi(): void
-    {
-        abort_unless($this->bolehBukaValidasi(), 403);
-
-        MonitoringPertemuanBlok::query()
-            ->where('pertemuan_blok_id', $this->pertemuan_blok_id)
-            ->update([
-                'divalidasi_pada' => null,
-                'divalidasi_oleh_user_id' => null,
-            ]);
-
-        $this->muatJurnal();
-        $this->dispatch('jurnal-pertemuan-tersimpan');
-        $this->dispatch('notify', message: [
-            'status' => 'success',
-            'message' => 'Validasi dibuka. Presensi dan jurnal bisa dikoreksi kembali.',
-        ]);
-    }
-
-    public function perluPresensi(): bool
-    {
-        return (bool) ($this->pertemuan()->aturan_kegiatan_blok?->perlu_presensi ?? true);
     }
 
     public function render()
@@ -249,10 +175,7 @@ new class extends Component
 
         return $this->view([
             'pertemuan' => $pertemuan,
-            'jurnal' => $pertemuan->monitoring_pertemuan_blok,
-            'terkunci' => $this->terkunci(),
             'bolehIsi' => $this->bolehIsi(),
-            'bolehBuka' => $this->bolehBukaValidasi(),
         ]);
     }
 };
@@ -260,30 +183,6 @@ new class extends Component
 
 <div>
     <x-full-page-loading message="Memproses operasional blok..." />
-    @if ($terkunci)
-        <div class="alert alert-secondary py-2 d-flex flex-wrap justify-content-between align-items-center gap-2 alert-dismissible fade show" role="alert">
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Tutup"></button>
-            <div>
-                <i class="ri-lock-line"></i>
-                Sudah divalidasi
-                @if ($jurnal?->divalidasi_oleh)
-                    oleh <span class="fw-semibold">{{ $jurnal->divalidasi_oleh->name }}</span>
-                @endif
-                @if ($jurnal?->divalidasi_pada)
-                    pada {{ $jurnal->divalidasi_pada->format('d/m/Y H:i') }}
-                @endif
-                . Presensi dan catatan monitoring terkunci.
-            </div>
-            @if ($bolehBuka)
-                <button type="button" class="btn btn-danger btn-sm"
-                    wire:click="bukaValidasi"
-                    wire:confirm="Buka kembali validasi pertemuan ini agar bisa dikoreksi?">
-                    <i class="ri-lock-unlock-line"></i> Buka Validasi
-                </button>
-            @endif
-        </div>
-    @endif
-
     <div class="border rounded p-3 mb-3 bg-light">
         <div class="text-muted small">Jadwal Rencana</div>
         <div class="fw-semibold">{{ $pertemuan->materi_rinci_blok?->judul ?: $pertemuan->topik }}</div>
@@ -341,21 +240,10 @@ new class extends Component
         @if ($bolehIsi)
             <div class="d-flex flex-wrap gap-2 mt-3">
                 @if ($tampilkan_tombol_simpan)
-                    <button type="submit" class="btn btn-primary btn-sm" wire:loading.attr="disabled" wire:target="simpan,validasi">
+                    <button type="submit" class="btn btn-primary btn-sm" wire:loading.attr="disabled" wire:target="simpan">
                         <i class="ri-save-line"></i> SIMPAN
                     </button>
                 @endif
-                @if ($tampilkan_tombol_validasi)
-                    <button type="button" class="btn btn-success btn-sm"
-                        wire:click="validasi"
-                        wire:confirm="Validasi pertemuan ini? Presensi dan jurnal akan terkunci."
-                        wire:loading.attr="disabled" wire:target="simpan,validasi">
-                        <i class="ri-shield-check-line"></i> SIMPAN & VALIDASI
-                    </button>
-                @endif
-            </div>
-            <div class="text-muted small mt-2">
-                Validasi mengunci presensi dan catatan monitoring pertemuan ini. Hanya pengelola yang bisa membukanya kembali.
             </div>
         @endif
     </form>

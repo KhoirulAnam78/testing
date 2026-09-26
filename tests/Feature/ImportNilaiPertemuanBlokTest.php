@@ -320,7 +320,6 @@ class ImportNilaiPertemuanBlokTest extends TestCase
         $blok = DB::table('blok')->insertGetId([
             'prodi_id' => $prodi,
             'semester_id' => $semester,
-            'kode' => fake()->unique()->lexify('B???'),
             'nama' => 'Blok Uji',
             'sks' => 4,
         ]);

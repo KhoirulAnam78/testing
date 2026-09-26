@@ -69,7 +69,7 @@ final class TableMataKuliah extends PowerGridComponent
             ->add('nama')
             ->add('prodi_nama', fn ($row) => $row->prodi?->nama ?: '-')
             ->add('blok_nama', fn ($row) => $row->blok->isNotEmpty()
-                ? $row->blok->map(fn ($blok) => $blok->kode.' - '.$blok->nama)->implode(', ')
+                ? $row->blok->pluck('nama')->implode(', ')
                 : '-')
             ->add('sks')
             ->add('status', fn ($row) => $row->status === 'aktif'

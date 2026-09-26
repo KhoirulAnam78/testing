@@ -177,7 +177,7 @@ Route::middleware(['auth', 'route.permission'])->group(function () {
 
         $namaFile = Str::slug(implode('-', array_filter([
             'daftar-hadir',
-            $pertemuan->blok?->kode,
+            $pertemuan->blok?->nama,
             $pertemuan->aturan_kegiatan_blok?->jenis_kegiatan?->nama,
             $pertemuan->kelompok_blok?->kode,
             $pertemuan->materi_rinci_blok?->pertemuan_ke

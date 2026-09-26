@@ -27,13 +27,10 @@
 </head>
 <body>
     @php
-        $statusLabel = [
-            'hadir' => 'Hadir',
-            'sakit' => 'Sakit',
-            'izin' => 'Izin',
-            'alpa' => 'Alpa',
-            'belum_diisi' => 'Belum diisi',
-        ];
+        $statusMeta = \App\Models\PresensiPertemuanBlok::STATUS;
+        $statusLabel = collect($statusMeta)
+            ->map(fn ($meta) => $meta['kode'].' - '.$meta['label'])
+            ->put('belum_diisi', 'Belum diisi');
         $dosen = $pertemuan->dosen_pertemuan_blok->pluck('dosen.nama')->filter()->join(', ');
         $jam = collect([$pertemuan->jam_mulai, $pertemuan->jam_selesai])
             ->filter()
@@ -47,7 +44,7 @@
     <table class="info">
         <tr>
             <td class="label">Blok</td><td class="separator">:</td>
-            <td>{{ $pertemuan->blok?->kode }} - {{ $pertemuan->blok?->nama }}</td>
+            <td>{{ $pertemuan->blok?->nama }}</td>
             <td class="label">Semester</td><td class="separator">:</td>
             <td>
                 @if ($pertemuan->blok?->semester)
@@ -117,10 +114,9 @@
 
     <div class="summary">
         <span><strong>Total:</strong> {{ $peserta->count() }}</span>
-        <span><strong>Hadir:</strong> {{ $rekap['hadir'] }}</span>
-        <span><strong>Sakit:</strong> {{ $rekap['sakit'] }}</span>
-        <span><strong>Izin:</strong> {{ $rekap['izin'] }}</span>
-        <span><strong>Alpa:</strong> {{ $rekap['alpa'] }}</span>
+        @foreach ($statusMeta as $status => $meta)
+            <span><strong>{{ $meta['kode'] }} - {{ $meta['label'] }}:</strong> {{ $rekap[$status] }}</span>
+        @endforeach
         <span><strong>Belum diisi:</strong> {{ $rekap['belum_diisi'] }}</span>
     </div>
 

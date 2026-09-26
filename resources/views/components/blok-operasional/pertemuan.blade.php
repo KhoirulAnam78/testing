@@ -586,7 +586,7 @@ new class extends Component
                 fn ($query) => $query->whereIn('dosen_id', $calonJadwal->pluck('dosen_id')->unique())
             )
             ->with([
-                'blok:id,kode,nama',
+                'blok:id,nama',
                 'kelompok_blok:id_kelompok_blok,kode,nama',
                 'materi_rinci_blok:id_materi_rinci_blok,judul',
                 'dosen_pertemuan_blok' => fn ($query) => $query
@@ -611,7 +611,7 @@ new class extends Component
                     continue;
                 }
 
-                $blok = trim(($jadwal->blok?->kode ?? '').' - '.($jadwal->blok?->nama ?? ''), ' -');
+                $blok = $jadwal->blok?->nama;
                 $kelompok = trim(($jadwal->kelompok_blok?->kode ?? '').' - '.($jadwal->kelompok_blok?->nama ?? ''), ' -');
                 $tujuan = collect([
                     $blok ?: 'Blok #'.$jadwal->blok_id,

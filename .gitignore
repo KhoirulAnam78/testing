@@ -54,6 +54,11 @@ Thumbs.db
 /test_*.php
 /tests
 /tests/Feature
+!/tests/
+/tests/*
+!/tests/Unit/
+/tests/Unit/*
+!/tests/Unit/SinkronisasiNilaiCbtBlokTest.php
 
 # Dump & catatan kerja internal
 /starter_db.sql

@@ -82,7 +82,7 @@ new #[Layout('layouts.app')] class extends Component
         $this->prodi = Prodi::where('status', 'aktif')->orderBy('nama')->get(['id_prodi', 'nama', 'kode']);
         $this->semester = Semester::orderByDesc('tahun')->orderBy('nama')->get(['id_semester', 'nama', 'tahun', 'kode']);
         $this->dosen = Dosen::where('status', 'aktif')->orderBy('nama')->get(['id_dosen', 'nidn', 'nama', 'gelar_depan', 'gelar_belakang']);
-        $this->jenis_kegiatan = JenisKegiatan::where('status', 'aktif')->orderBy('nama')->get(['id', 'kode', 'nama', 'jumlah_pertemuan_default', 'durasi_menit_default', 'bobot_sks_per_pertemuan', 'sumber_nilai']);
+        $this->jenis_kegiatan = JenisKegiatan::where('status', 'aktif')->orderBy('nama')->get(['id', 'kode', 'nama', 'jumlah_pertemuan_default', 'durasi_menit_default', 'sumber_nilai']);
         $this->mata_kuliah = MataKuliah::where('status', 'aktif')->orderBy('nama')->get(['id', 'prodi_id', 'kode', 'nama', 'sks']);
         $this->blok_copy_options = Blok::query()
             ->with(['prodi', 'semester'])
@@ -256,16 +256,6 @@ new #[Layout('layouts.app')] class extends Component
             }
 
             $this->aturan[$index]['durasi_menit'] = $jenis->durasi_menit_default;
-            $jumlahPertemuan = collect($this->aturan[$index]['materi'] ?? [])
-                ->sum(fn (array $materi) => collect($materi['rinci'] ?? [])
-                    ->where('status', 'aktif')
-                    ->count()) ?: (int) $jenis->jumlah_pertemuan_default;
-            $this->aturan[$index]['bobot_sks'] = number_format(
-                (float) $jenis->bobot_sks_per_pertemuan * $jumlahPertemuan,
-                4,
-                '.',
-                ''
-            );
 
             if ($jenis->sumber_nilai === 'cbt') {
                 $this->aturan[$index]['perlu_penilaian'] = true;
@@ -536,12 +526,7 @@ new #[Layout('layouts.app')] class extends Component
                 'id' => null,
                 'jenis_kegiatan_id' => $jenis->id,
                 'durasi_menit' => $jenis->durasi_menit_default,
-                'bobot_sks' => number_format(
-                    (float) $jenis->bobot_sks_per_pertemuan * (int) $jenis->jumlah_pertemuan_default,
-                    4,
-                    '.',
-                    ''
-                ),
+                'bobot_sks' => '0.0000',
                 'jumlah_mahasiswa_per_kelompok' => null,
                 'perlu_kelompok' => true,
                 'perlu_presensi' => true,

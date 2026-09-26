@@ -133,14 +133,14 @@ new #[Layout('layouts.app')] class extends Component
                 $query->where(function ($q) use ($like) {
                     $q->whereHas('materi_rinci_blok', fn ($m) => $m->where('judul', 'like', $like))
                         ->orWhere('topik', 'like', $like)
-                        ->orWhereHas('blok', fn ($b) => $b->where('kode', 'like', $like)->orWhere('nama', 'like', $like))
+                        ->orWhereHas('blok', fn ($b) => $b->where('nama', 'like', $like))
                         ->orWhereHas('kelompok_blok', fn ($k) => $k->where('kode', 'like', $like)->orWhere('nama', 'like', $like))
                         ->orWhereHas('dosen_pertemuan_blok.dosen', fn ($d) => $d->where('nama', 'like', $like))
                         ->orWhereHas('lampiran_materi_blok', fn ($l) => $l->where('judul', 'like', $like));
                 });
             })
             ->with([
-                'blok:id,kode,nama,semester_id',
+                'blok:id,nama,semester_id',
                 'blok.semester:id_semester,nama,tahun',
                 'kelompok_blok:id_kelompok_blok,kode,nama',
                 'materi_rinci_blok:id_materi_rinci_blok,judul,pertemuan_ke',
@@ -162,7 +162,7 @@ new #[Layout('layouts.app')] class extends Component
             ->whereHas('pertemuan_blok', fn ($query) => $query->whereIn('kelompok_blok_id', $this->kelompokIds()))
             ->when($this->semester_id !== '', fn ($query) => $query->where('semester_id', (int) $this->semester_id))
             ->orderBy('nama')
-            ->get(['id', 'kode', 'nama']);
+            ->get(['id', 'nama']);
     }
 
     public function semesterOptions()
@@ -315,7 +315,7 @@ new #[Layout('layouts.app')] class extends Component
                             <select class="form-select" wire:model.live="blok_id">
                                 <option value="">Semua blok</option>
                                 @foreach ($blokOptions as $blok)
-                                    <option value="{{ $blok->id }}">{{ $blok->kode }} - {{ $blok->nama }}</option>
+                                    <option value="{{ $blok->id }}">{{ $blok->nama }}</option>
                                 @endforeach
                             </select>
                         </div>
@@ -379,7 +379,7 @@ new #[Layout('layouts.app')] class extends Component
                                 <div class="mb-3 text-muted d-flex flex-wrap align-items-center gap-2">
                                     <span class="d-inline-flex align-items-center">
                                         <i class="ri-book-read-line me-1 text-primary"></i>
-                                        <span class="fw-semibold text-body">{{ $item->blok?->kode ?? '-' }} &mdash; {{ $item->blok?->nama ?? 'Blok tidak diketahui' }}</span>
+                                        <span class="fw-semibold text-body">{{ $item->blok?->nama ?? 'Blok tidak diketahui' }}</span>
                                     </span>
                                     <span class="text-muted">&middot;</span>
                                     <span class="d-inline-flex align-items-center">
