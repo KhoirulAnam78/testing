@@ -44,7 +44,7 @@ final class TableMataKuliah extends PowerGridComponent
     {
         $this->rowNumber = 0;
 
-        return MataKuliah::query()->with(['prodi', 'blok']);
+        return MataKuliah::query()->with('prodi');
     }
 
     public function prepareToExport(bool $selected = false): EloquentCollection|Collection
@@ -68,9 +68,6 @@ final class TableMataKuliah extends PowerGridComponent
             ->add('kode')
             ->add('nama')
             ->add('prodi_nama', fn ($row) => $row->prodi?->nama ?: '-')
-            ->add('blok_nama', fn ($row) => $row->blok->isNotEmpty()
-                ? $row->blok->pluck('nama')->implode(', ')
-                : '-')
             ->add('sks')
             ->add('status', fn ($row) => $row->status === 'aktif'
                 ? '<span class="badge bg-success">Aktif</span>'
@@ -84,7 +81,6 @@ final class TableMataKuliah extends PowerGridComponent
             Column::make('Kode', 'kode')->searchable()->sortable(),
             Column::make('Nama', 'nama')->searchable()->sortable(),
             Column::make('Prodi', 'prodi_nama'),
-            Column::make('Blok', 'blok_nama'),
             Column::make('SKS', 'sks')->sortable(),
             Column::make('Status', 'status')->sortable(),
             Column::action('Aksi'),
