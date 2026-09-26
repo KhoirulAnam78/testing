@@ -26,7 +26,7 @@ final class TableRoles extends PowerGridComponent
                 ->showSearchInput(),
             PowerGrid::footer()
                 ->showPerPage(10)
-                ->showRecordCount('min'),
+                ->showRecordCount('full'),
         ];
     }
 

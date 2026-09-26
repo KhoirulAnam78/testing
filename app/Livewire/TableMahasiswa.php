@@ -40,7 +40,7 @@ final class TableMahasiswa extends PowerGridComponent
             PowerGrid::exportable('data-mahasiswa')
                 ->type('xlsx', 'csv')
                 ->stripTags(true),
-            PowerGrid::footer()->showPerPage(10)->showRecordCount('min'),
+            PowerGrid::footer()->showPerPage(10)->showRecordCount('full'),
         ];
     }
 

@@ -36,7 +36,7 @@ final class TableMataKuliah extends PowerGridComponent
             PowerGrid::exportable('data-mata-kuliah')
                 ->type('xlsx', 'csv')
                 ->stripTags(true),
-            PowerGrid::footer()->showPerPage(10)->showRecordCount('min'),
+            PowerGrid::footer()->showPerPage(10)->showRecordCount('full'),
         ];
     }
 

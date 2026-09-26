@@ -30,7 +30,7 @@ final class TableSemester extends PowerGridComponent
     {
         return [
             PowerGrid::header()->showSearchInput(),
-            PowerGrid::footer()->showPerPage(10)->showRecordCount('min'),
+            PowerGrid::footer()->showPerPage(10)->showRecordCount('full'),
         ];
     }
 
