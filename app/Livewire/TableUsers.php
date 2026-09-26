@@ -27,7 +27,7 @@ final class TableUsers extends PowerGridComponent
                 ->showSearchInput(),
             PowerGrid::footer()
                 ->showPerPage(10)
-                ->showRecordCount('min'),
+                ->showRecordCount('full'),
         ];
     }
 

@@ -24,7 +24,7 @@ final class TableKurikulum extends PowerGridComponent
 
     public function setUp(): array
     {
-        return [PowerGrid::header()->showSearchInput(), PowerGrid::footer()->showPerPage(10)->showRecordCount('min')];
+        return [PowerGrid::header()->showSearchInput(), PowerGrid::footer()->showPerPage(10)->showRecordCount('full')];
     }
 
     public function datasource(): ?Builder

@@ -29,7 +29,7 @@ final class TableMenu extends PowerGridComponent
                 ->showSearchInput(),
             PowerGrid::footer()
                 ->showPerPage(10)
-                ->showRecordCount('min'),
+                ->showRecordCount('full'),
         ];
     }
 
