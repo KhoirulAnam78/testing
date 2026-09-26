@@ -116,7 +116,6 @@ new #[Layout('layouts.app')] class extends Component
                     $query->where('urut_dosen.nama', 'like', "%{$search}%")
                         ->orWhere('urut_dosen.nidn', 'like', "%{$search}%")
                         ->orWhere('urut_dosen.nip', 'like', "%{$search}%")
-                        ->orWhere('urut_blok.kode', 'like', "%{$search}%")
                         ->orWhere('urut_blok.nama', 'like', "%{$search}%")
                         ->orWhere('urut_materi.judul', 'like', "%{$search}%")
                         ->orWhere('urut_jenis.nama', 'like', "%{$search}%")
@@ -129,7 +128,7 @@ new #[Layout('layouts.app')] class extends Component
                 'pertemuan_blok' => fn ($query) => $query
                     ->select('id_pertemuan_blok', 'blok_id', 'aturan_kegiatan_blok_id', 'materi_rinci_blok_id', 'kelompok_blok_id', 'tanggal', 'status')
                     ->with([
-                        'blok:id,kode,nama,semester_id',
+                        'blok:id,nama,semester_id',
                         'blok.semester:id_semester,nama,tahun',
                         'aturan_kegiatan_blok' => fn ($query) => $query
                             ->select('id', 'jenis_kegiatan_id', 'bobot_sks')
@@ -229,7 +228,6 @@ new #[Layout('layouts.app')] class extends Component
         $groups = [];
         $headings = [
             'Semester',
-            'Kode Blok',
             'Blok',
             'Pertemuan Ke',
             'Materi Pertemuan',
@@ -246,7 +244,7 @@ new #[Layout('layouts.app')] class extends Component
             $groupRow = count($rows) + 1;
             $rows[] = [
                 (string) ($dosen?->nama ?? '')."\nNIDN/NIP: ".($dosen?->nidn ?: ($dosen?->nip ?: '-')),
-                '', '', '', '', '', '',
+                '', '', '', '', '',
                 $daftarPertemuan->count().' pertemuan',
                 '',
                 'Total SKS',
@@ -259,7 +257,6 @@ new #[Layout('layouts.app')] class extends Component
                 $pertemuan = $item->pertemuan_blok;
                 $rows[] = [
                     trim(ucfirst((string) ($pertemuan?->blok?->semester?->nama ?? '')).' '.($pertemuan?->blok?->semester?->tahun ?? '')),
-                    (string) ($pertemuan?->blok?->kode ?? ''),
                     (string) ($pertemuan?->blok?->nama ?? ''),
                     (string) ($pertemuan?->materi_rinci_blok?->pertemuan_ke ?? ''),
                     (string) ($pertemuan?->materi_rinci_blok?->judul ?? 'Pertemuan'),
@@ -301,18 +298,18 @@ new #[Layout('layouts.app')] class extends Component
                 $sheet->setShowSummaryBelow(false);
                 $sheet->freezePane('A2');
                 $sheet->getParent()?->getDefaultStyle()->getFont()->setName('Aptos')->setSize(11);
-                $sheet->mergeCells('A1:K1');
+                $sheet->mergeCells('A1:J1');
                 $sheet->getRowDimension(1)->setRowHeight(30);
-                $sheet->getStyle('A1:K1')->applyFromArray([
+                $sheet->getStyle('A1:J1')->applyFromArray([
                     'font' => ['bold' => true, 'size' => 16, 'color' => ['rgb' => 'FFFFFF']],
                     'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '17365D']],
                     'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
                 ]);
 
                 if ($this->groups === []) {
-                    $sheet->mergeCells('A2:K2');
+                    $sheet->mergeCells('A2:J2');
                     $sheet->getRowDimension(2)->setRowHeight(28);
-                    $sheet->getStyle('A2:K2')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+                    $sheet->getStyle('A2:J2')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
 
                     return;
                 }
@@ -323,42 +320,42 @@ new #[Layout('layouts.app')] class extends Component
                     $detailStart = $group['detail_start'];
                     $detailEnd = $group['detail_end'];
 
-                    $sheet->mergeCells("A{$groupRow}:G{$groupRow}");
-                    $sheet->mergeCells("H{$groupRow}:I{$groupRow}");
+                    $sheet->mergeCells("A{$groupRow}:F{$groupRow}");
+                    $sheet->mergeCells("G{$groupRow}:H{$groupRow}");
                     $sheet->getRowDimension($groupRow)->setRowHeight(38);
-                    $sheet->getStyle("A{$groupRow}:K{$groupRow}")->applyFromArray([
+                    $sheet->getStyle("A{$groupRow}:J{$groupRow}")->applyFromArray([
                         'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
                         'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '1F4E78']],
                         'alignment' => ['vertical' => Alignment::VERTICAL_CENTER, 'wrapText' => true],
                     ]);
-                    $sheet->getStyle("H{$groupRow}:K{$groupRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
-                    $sheet->getStyle("K{$groupRow}")->getNumberFormat()->setFormatCode('0.0000');
+                    $sheet->getStyle("G{$groupRow}:J{$groupRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+                    $sheet->getStyle("J{$groupRow}")->getNumberFormat()->setFormatCode('0.0000');
 
                     $sheet->getRowDimension($headingRow)->setRowHeight(30);
-                    $sheet->getStyle("A{$headingRow}:K{$headingRow}")->applyFromArray([
+                    $sheet->getStyle("A{$headingRow}:J{$headingRow}")->applyFromArray([
                         'font' => ['bold' => true, 'color' => ['rgb' => '1F4E78']],
                         'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => 'D9EAF7']],
                         'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER, 'wrapText' => true],
                     ]);
 
-                    $sheet->getStyle("A{$headingRow}:K{$detailEnd}")->applyFromArray([
+                    $sheet->getStyle("A{$headingRow}:J{$detailEnd}")->applyFromArray([
                         'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN, 'color' => ['rgb' => 'D9E2F3']]],
                         'alignment' => ['vertical' => Alignment::VERTICAL_CENTER],
                     ]);
-                    $sheet->getStyle("I{$detailStart}:K{$detailEnd}")->getNumberFormat()->setFormatCode('0.0000');
+                    $sheet->getStyle("H{$detailStart}:J{$detailEnd}")->getNumberFormat()->setFormatCode('0.0000');
 
                     for ($row = $detailStart; $row <= $detailEnd; $row++) {
                         $sheet->getRowDimension($row)->setRowHeight(22)->setOutlineLevel(1);
 
                         if (($row - $detailStart) % 2 === 1) {
-                            $sheet->getStyle("A{$row}:K{$row}")->getFill()
+                            $sheet->getStyle("A{$row}:J{$row}")->getFill()
                                 ->setFillType(Fill::FILL_SOLID)
                                 ->getStartColor()->setRGB('F4F7FA');
                         }
                     }
                 }
 
-                $sheet->getStyle("A1:K{$lastRow}")->getAlignment()->setVertical(Alignment::VERTICAL_CENTER);
+                $sheet->getStyle("A1:J{$lastRow}")->getAlignment()->setVertical(Alignment::VERTICAL_CENTER);
             }
         };
 
@@ -548,7 +545,7 @@ new #[Layout('layouts.app')] class extends Component
                                 <tr wire:key="rincian-sks-{{ $item->id_dosen_pertemuan_blok }}">
                                     <td>
                                         <div class="small text-muted">{{ ucfirst($pertemuan?->blok?->semester?->nama ?? '') }} {{ $pertemuan?->blok?->semester?->tahun }}</div>
-                                        <div class="fw-semibold">{{ $pertemuan?->blok?->kode }} - {{ $pertemuan?->blok?->nama }}</div>
+                                        <div class="fw-semibold">{{ $pertemuan?->blok?->nama }}</div>
                                     </td>
                                     <td>
                                         <div class="fw-semibold">{{ $pertemuan?->materi_rinci_blok?->judul ?: 'Pertemuan' }}</div>

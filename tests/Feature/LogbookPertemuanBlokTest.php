@@ -33,7 +33,7 @@ class LogbookPertemuanBlokTest extends TestCase
             ->assertNotFound();
     }
 
-    public function test_jurnal_monitoring_belum_tersimpan_menolak_unggahan(): void
+    public function test_monitoring_belum_divalidasi_menolak_unggahan(): void
     {
         Storage::fake('local');
         $data = $this->fixture(true, false);
@@ -219,7 +219,7 @@ class LogbookPertemuanBlokTest extends TestCase
         ]);
     }
 
-    private function fixture(bool $aktif = true, bool $monitoringAda = true): array
+    private function fixture(bool $aktif = true, bool $monitoringTervalidasi = true): array
     {
         $mahasiswaUser = User::factory()->create();
         $dosenUser = User::factory()->create();
@@ -251,7 +251,6 @@ class LogbookPertemuanBlokTest extends TestCase
         $blok = DB::table('blok')->insertGetId([
             'prodi_id' => $prodi,
             'semester_id' => $semester,
-            'kode' => fake()->unique()->lexify('B???'),
             'nama' => 'Blok Uji',
             'sks' => 4,
         ]);
@@ -301,13 +300,13 @@ class LogbookPertemuanBlokTest extends TestCase
             'dosen_id' => $dosen,
         ]);
 
-        if ($monitoringAda) {
-            DB::table('monitoring_pertemuan_blok')->insert([
-                'pertemuan_blok_id' => $pertemuan,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]);
-        }
+        DB::table('monitoring_pertemuan_blok')->insert([
+            'pertemuan_blok_id' => $pertemuan,
+            'divalidasi_pada' => $monitoringTervalidasi ? now() : null,
+            'divalidasi_oleh_user_id' => $monitoringTervalidasi ? $dosenUser->id : null,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
 
         return [
             'blok' => $blok,

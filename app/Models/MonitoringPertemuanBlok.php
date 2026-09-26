@@ -46,4 +46,17 @@ class MonitoringPertemuanBlok extends Model
     {
         return $this->belongsTo(User::class, 'diisi_oleh_user_id', 'id');
     }
+
+    public function divalidasi_oleh(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'divalidasi_oleh_user_id', 'id');
+    }
+
+    /**
+     * Jurnal dan presensi pertemuan ini tidak boleh diubah lagi selama terkunci.
+     */
+    public function terkunci(): bool
+    {
+        return $this->divalidasi_pada !== null;
+    }
 }

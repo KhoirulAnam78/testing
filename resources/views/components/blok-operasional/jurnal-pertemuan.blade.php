@@ -59,6 +59,7 @@ new class extends Component
         return PertemuanBlok::query()
             ->with([
                 'monitoring_pertemuan_blok',
+                'monitoring_pertemuan_blok.divalidasi_oleh:id,name',
                 'aturan_kegiatan_blok:id,perlu_presensi',
                 'materi_rinci_blok:id_materi_rinci_blok,judul',
             ])

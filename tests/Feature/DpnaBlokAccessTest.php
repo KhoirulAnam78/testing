@@ -27,17 +27,16 @@ class DpnaBlokAccessTest extends TestCase
         $this->actingAs($user)->get(route('dpna-blok.index'))->assertOk()->assertSee('DPNA Blok');
         $this->get(route('dpna-blok.detail', Crypt::encrypt($blok->id)))
             ->assertOk()
-            ->assertSee($blok->nama)
-            ->assertDontSee($blok->kode);
+            ->assertSee($blok->nama);
     }
 
     public function test_koordinator_hanya_dapat_membuka_blok_kelolaannya(): void
     {
         $user = User::factory()->create();
         $dosen = Dosen::create(['user_id' => $user->id, 'nama' => 'Koordinator DPNA']);
-        $milik = $this->blok(['kode' => 'DPNA-A']);
+        $milik = $this->blok(['nama' => 'Blok DPNA A']);
         PengelolaBlok::create(['blok_id' => $milik->id, 'dosen_id' => $dosen->id_dosen, 'jabatan' => 'koordinator']);
-        $lain = $this->blok(['kode' => 'DPNA-B']);
+        $lain = $this->blok(['nama' => 'Blok DPNA B']);
 
         $this->actingAs($user)->get(route('dpna-blok.index'))->assertOk();
         $this->get(route('dpna-blok.detail', Crypt::encrypt($milik->id)))->assertOk();
@@ -49,7 +48,7 @@ class DpnaBlokAccessTest extends TestCase
         foreach (['koordinator', 'asisten_koordinator', 'kontributor'] as $jabatan) {
             $user = User::factory()->create();
             $dosen = Dosen::create(['user_id' => $user->id, 'nama' => str($jabatan)->headline()]);
-            $blok = $this->blok(['kode' => 'DPNA-'.str()->random(5)]);
+            $blok = $this->blok(['nama' => 'Blok DPNA '.str()->random(5)]);
             PengelolaBlok::create(compact('jabatan') + ['blok_id' => $blok->id, 'dosen_id' => $dosen->id_dosen]);
 
             $this->actingAs($user)->get(route('dpna-blok.detail', Crypt::encrypt($blok->id)))->assertOk();
@@ -78,7 +77,6 @@ class DpnaBlokAccessTest extends TestCase
         return Blok::create(array_merge([
             'prodi_id' => $prodi->id_prodi,
             'semester_id' => $semester->id_semester,
-            'kode' => 'DPNA-'.str()->random(5),
             'nama' => 'Blok Uji DPNA',
             'sks' => 4,
         ], $attributes));

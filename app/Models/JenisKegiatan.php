@@ -17,7 +17,8 @@ class JenisKegiatan extends Model
     protected function casts(): array
     {
         return [
-            'bobot_sks_per_pertemuan' => 'decimal:4',
+            'bobot_ujian_pertama' => 'decimal:2',
+            'bobot_remedial' => 'decimal:2',
         ];
     }
 

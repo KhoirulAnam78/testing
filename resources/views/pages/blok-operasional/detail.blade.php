@@ -70,7 +70,7 @@ new #[Layout('layouts.app')] class extends Component {
             <div class="page-title-right">
                 <ol class="breadcrumb m-0">
                     <li class="breadcrumb-item"><a href="{{ route('blok-operasional.index') }}" wire:navigate>Operasional Blok</a></li>
-                    <li class="breadcrumb-item active">{{ $blok->kode }}</li>
+                    <li class="breadcrumb-item active">{{ $blok->nama }}</li>
                 </ol>
             </div>
         </div>
@@ -83,7 +83,7 @@ new #[Layout('layouts.app')] class extends Component {
             <div class="row g-3">
                 <div class="col-md-2">
                     <div class="text-muted small">Blok</div>
-                    <div class="fw-semibold">{{ $blok->kode }} - {{ $blok->nama }}</div>
+                    <div class="fw-semibold">{{ $blok->nama }}</div>
                 </div>
                 <div class="col-md-2">
                     <div class="text-muted small">Koordinator</div>

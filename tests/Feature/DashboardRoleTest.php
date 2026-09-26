@@ -297,7 +297,7 @@ class DashboardRoleTest extends TestCase
             'is_aktif' => false, 'created_at' => now(), 'updated_at' => now(),
         ], 'id_semester');
         $blokId = DB::table('blok')->insertGetId([
-            'prodi_id' => $this->prodi(), 'semester_id' => $semesterId, 'kode' => "BL-$suffix",
+            'prodi_id' => $this->prodi(), 'semester_id' => $semesterId,
             'nama' => "Blok $judul", 'sks' => 4, 'status' => 'aktif', 'created_at' => now(), 'updated_at' => now(),
         ]);
         $jenisId = DB::table('jenis_kegiatan')->insertGetId([

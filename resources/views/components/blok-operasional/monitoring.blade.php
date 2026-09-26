@@ -84,11 +84,11 @@ new class extends Component
     private function dasarQuery()
     {
         return PertemuanBlok::query()
-            ->where('blok_id', $this->blok_id)
+            ->where('pertemuan_blok.blok_id', $this->blok_id)
             ->when($this->aturan_kegiatan_blok_id !== '', fn ($query) => $query
-                ->where('aturan_kegiatan_blok_id', (int) $this->aturan_kegiatan_blok_id))
+                ->where('pertemuan_blok.aturan_kegiatan_blok_id', (int) $this->aturan_kegiatan_blok_id))
             ->when($this->kelompok_blok_id !== '', fn ($query) => $query
-                ->where('kelompok_blok_id', (int) $this->kelompok_blok_id))
+                ->where('pertemuan_blok.kelompok_blok_id', (int) $this->kelompok_blok_id))
             ->when($this->status_pengisian === 'belum', fn ($query) => $query
                 ->whereDoesntHave('monitoring_pertemuan_blok'))
             ->when($this->status_pengisian === 'terisi', fn ($query) => $query
@@ -97,9 +97,10 @@ new class extends Component
                 $search = '%'.$this->search.'%';
 
                 $query->where(function ($inner) use ($search) {
-                    $inner->where('topik', 'like', $search)
-                        ->orWhere('ruangan', 'like', $search)
+                    $inner->where('pertemuan_blok.topik', 'like', $search)
+                        ->orWhere('pertemuan_blok.ruangan', 'like', $search)
                         ->orWhereHas('materi_rinci_blok', fn ($materi) => $materi->where('judul', 'like', $search))
+                        ->orWhereHas('materi_rinci_blok.materi_blok', fn ($materi) => $materi->where('judul', 'like', $search))
                         ->orWhereHas('kelompok_blok', fn ($kelompok) => $kelompok->where('kode', 'like', $search));
                 });
             });
@@ -108,11 +109,18 @@ new class extends Component
     public function pertemuanList()
     {
         return $this->dasarQuery()
+            ->select('pertemuan_blok.*')
+            ->leftJoin('aturan_kegiatan_blok as urut_kegiatan', 'urut_kegiatan.id', '=', 'pertemuan_blok.aturan_kegiatan_blok_id')
+            ->leftJoin('jenis_kegiatan as urut_jenis', 'urut_jenis.id', '=', 'urut_kegiatan.jenis_kegiatan_id')
+            ->leftJoin('kelompok_blok as urut_kelompok', 'urut_kelompok.id_kelompok_blok', '=', 'pertemuan_blok.kelompok_blok_id')
+            ->leftJoin('materi_rinci_blok as urut_materi', 'urut_materi.id_materi_rinci_blok', '=', 'pertemuan_blok.materi_rinci_blok_id')
+            ->leftJoin('materi_blok as urut_materi_pokok', 'urut_materi_pokok.id_materi_blok', '=', 'urut_materi.materi_blok_id')
             ->with([
                 'kelompok_blok' => fn ($query) => $query
                     ->select('id_kelompok_blok', 'kode', 'nama')
                     ->withCount('anggota_kelompok_blok'),
-                'materi_rinci_blok:id_materi_rinci_blok,judul,pertemuan_ke',
+                'materi_rinci_blok:id_materi_rinci_blok,materi_blok_id,judul,pertemuan_ke',
+                'materi_rinci_blok.materi_blok:id_materi_blok,judul',
                 'aturan_kegiatan_blok' => fn ($query) => $query
                     ->select('id', 'jenis_kegiatan_id', 'perlu_presensi', 'perlu_penilaian')
                     ->withCount('komponen_penilaian_blok'),
@@ -125,9 +133,13 @@ new class extends Component
                 'presensi_pertemuan_blok as presensi_tercatat_count',
                 'nilai_pertemuan_blok as nilai_tercatat_count',
             ])
-            ->orderByRaw('tanggal IS NULL')
-            ->orderBy('tanggal')
-            ->orderBy('jam_mulai')
+            ->orderBy('urut_jenis.nama')
+            ->orderBy('urut_kelompok.kode')
+            ->orderByRaw('urut_materi_pokok.urutan IS NULL')
+            ->orderBy('urut_materi_pokok.urutan')
+            ->orderByRaw('urut_materi.pertemuan_ke IS NULL')
+            ->orderBy('urut_materi.pertemuan_ke')
+            ->orderBy('pertemuan_blok.id_pertemuan_blok')
             ->paginate(15, pageName: 'monitoringPage');
     }
 
@@ -232,15 +244,38 @@ new class extends Component
     }
 
     #[On('presensi-pertemuan-tersimpan')]
-    public function refreshPresensi(): void
+    public function tandaiPresensiTersimpan(): void
     {
-        //
+        $this->presensi_tersimpan = true;
+        $this->lanjutkanValidasi();
     }
 
     #[On('jurnal-pertemuan-tersimpan')]
-    public function refreshJurnal(): void
+    public function tandaiJurnalTersimpan(): void
     {
-        //
+        $this->jurnal_tersimpan = true;
+        $this->lanjutkanValidasi();
+    }
+
+    private function lanjutkanValidasi(): void
+    {
+        if (
+            $this->validasi_setelah_simpan
+            && $this->jurnal_tersimpan
+            && $this->presensi_tersimpan
+            && $this->pelaksanaan_pertemuan_id
+        ) {
+            $this->validasi_setelah_simpan = false;
+            $this->dispatch(
+                'validasi-pelaksanaan',
+                pertemuan_blok_id: $this->pelaksanaan_pertemuan_id
+            );
+        }
+    }
+
+    private function resetStateSimpanPelaksanaan(): void
+    {
+        $this->reset(['validasi_setelah_simpan', 'jurnal_tersimpan', 'presensi_tersimpan']);
     }
 
     #[On('nilai-pertemuan-tersimpan')]
@@ -310,7 +345,8 @@ new class extends Component
             <h5 class="mb-1">Monitoring Pertemuan</h5>
             <div class="text-muted small">
                 Pengelola dapat mengisi maupun mengoreksi presensi, nilai, dan catatan monitoring,
-                termasuk data yang sudah pernah disimpan.
+                serta membuka kembali validasi yang keliru.
+                Nilai tidak terkunci oleh validasi, jadi masih bisa diperbaiki kapan saja.
             </div>
         </div>
         <div class="card-body">
@@ -394,10 +430,15 @@ new class extends Component
                                     <div class="text-muted small">{{ $item->kelompok_blok?->anggota_kelompok_blok_count }} anggota</div>
                                 </td>
                                 <td>
-                                    <div class="small">
-                                        @if ($item->materi_rinci_blok?->pertemuan_ke)
-                                            <span class="badge bg-light text-dark border">P{{ $item->materi_rinci_blok->pertemuan_ke }}</span>
-                                        @endif
+                                    @if ($item->materi_rinci_blok?->materi_blok)
+                                        <span class="badge bg-primary-subtle text-primary text-wrap text-start">
+                                            {{ $item->materi_rinci_blok->materi_blok->judul }}
+                                        </span>
+                                    @endif
+                                    @if ($item->materi_rinci_blok?->pertemuan_ke)
+                                        <div class="small fw-semibold">Pertemuan Ke {{ $item->materi_rinci_blok->pertemuan_ke }}</div>
+                                    @endif
+                                    <div class="text-muted small text-wrap">
                                         {{ $item->materi_rinci_blok?->judul ?: $item->topik }}
                                     </div>
                                 </td>
@@ -411,7 +452,8 @@ new class extends Component
                                     @if (! $jurnal)
                                         <span class="badge bg-light text-dark border">belum diisi</span>
                                     @else
-                                        <span class="badge bg-success-subtle text-success">sudah diisi</span>
+                                        <span class="badge bg-info-subtle text-info">sudah diisi</span>
+                                        <div class="small text-muted mt-1">belum divalidasi</div>
                                     @endif
                                 </td>
                                 <td>
@@ -446,17 +488,19 @@ new class extends Component
                                         @endif
                                     @endif
                                 </td>
-                                <td class="text-end">
-                                    <button type="button" class="btn btn-secondary btn-sm"
-                                        wire:click="kelolaPelaksanaan('{{ $item->id_pertemuan_blok }}', 'pelaksanaan')">
-                                        <i class="ri-booklet-line"></i> Isi Monitoring
-                                    </button>
-                                    @if ($item->aturan_kegiatan_blok?->perlu_penilaian && $item->aturan_kegiatan_blok?->jenis_kegiatan?->sumber_nilai !== 'cbt')
-                                        <button type="button" class="btn btn-info btn-sm mt-1"
-                                            wire:click="kelolaPelaksanaan('{{ $item->id_pertemuan_blok }}', 'nilai')">
-                                            <i class="ri-graduation-cap-line"></i> Nilai
+                                <td>
+                                    <div class="d-grid gap-1" style="grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); min-width: 210px;">
+                                        <button type="button" class="btn btn-secondary btn-sm text-nowrap"
+                                            wire:click="kelolaPelaksanaan('{{ $item->id_pertemuan_blok }}', 'pelaksanaan')">
+                                            <i class="ri-booklet-line"></i> Monitoring
                                         </button>
-                                    @endif
+                                        @if ($item->aturan_kegiatan_blok?->perlu_penilaian && $item->aturan_kegiatan_blok?->jenis_kegiatan?->sumber_nilai !== 'cbt')
+                                            <button type="button" class="btn btn-info btn-sm text-nowrap"
+                                                wire:click="kelolaPelaksanaan('{{ $item->id_pertemuan_blok }}', 'nilai')">
+                                                <i class="ri-graduation-cap-line"></i> Nilai
+                                            </button>
+                                        @endif
+                                    </div>
                                 </td>
                             </tr>
                         @empty

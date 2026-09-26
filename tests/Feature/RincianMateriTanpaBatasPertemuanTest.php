@@ -119,14 +119,13 @@ class RincianMateriTanpaBatasPertemuanTest extends TestCase
             ->set('semester_id', (string) $semester->id_semester)
             ->set('koordinator_id', (string) $koordinator->id_dosen)
             ->set('asisten_koordinator_id', (string) $asisten->id_dosen)
-            ->set('kode', 'BLOK-UJI')
             ->set('nama', 'Blok Uji')
             ->set('sks', 1)
             ->set('aturan', $aturan)
             ->call('save')
             ->assertHasNoErrors();
 
-        $blok = Blok::query()->where('kode', 'BLOK-UJI')->sole();
+        $blok = Blok::query()->where('nama', 'Blok Uji')->sole();
         $rincian = DB::table('materi_rinci_blok')
             ->join('materi_blok', 'materi_blok.id_materi_blok', '=', 'materi_rinci_blok.materi_blok_id')
             ->join('aturan_kegiatan_blok', 'aturan_kegiatan_blok.id', '=', 'materi_blok.aturan_kegiatan_blok_id')
@@ -179,7 +178,6 @@ class RincianMateriTanpaBatasPertemuanTest extends TestCase
             ->set('semester_id', (string) $semester->id_semester)
             ->set('koordinator_id', (string) $koordinator->id_dosen)
             ->set('asisten_koordinator_id', (string) $asisten->id_dosen)
-            ->set('kode', 'BLOK-LANJUT')
             ->set('nama', 'Blok Lanjut')
             ->set('sks', 1)
             ->set('aturan', $aturan)
@@ -270,7 +268,6 @@ class RincianMateriTanpaBatasPertemuanTest extends TestCase
             ->set('semester_id', (string) $semester->id_semester)
             ->set('koordinator_id', (string) $koordinator->id_dosen)
             ->set('asisten_koordinator_id', (string) $asisten->id_dosen)
-            ->set('kode', 'BLOK-NILAI-GAGAL')
             ->set('nama', 'Blok Penilaian Gagal')
             ->set('sks', 1)
             ->set('aturan', $aturan)
@@ -282,14 +279,13 @@ class RincianMateriTanpaBatasPertemuanTest extends TestCase
             ->assertSet('edit_id', null)
             ->assertSet('active_aturan_index', 0);
 
-        $this->assertDatabaseMissing('blok', ['kode' => 'BLOK-NILAI-GAGAL']);
+        $this->assertDatabaseMissing('blok', ['nama' => 'Blok Penilaian Gagal']);
 
         $component = Livewire::test('pages::blok.add_edit', ['id' => 'add'])
             ->set('prodi_id', (string) $prodi->id_prodi)
             ->set('semester_id', (string) $semester->id_semester)
             ->set('koordinator_id', (string) $koordinator->id_dosen)
             ->set('asisten_koordinator_id', (string) $asisten->id_dosen)
-            ->set('kode', 'BLOK-NILAI')
             ->set('nama', 'Blok Penilaian')
             ->set('sks', 1)
             ->set('aturan', $aturan)
@@ -301,7 +297,7 @@ class RincianMateriTanpaBatasPertemuanTest extends TestCase
             ->assertSet('active_tab', 'penilaian')
             ->assertSet('active_aturan_index', 1);
 
-        $blokId = DB::table('blok')->where('kode', 'BLOK-NILAI')->value('id');
+        $blokId = DB::table('blok')->where('nama', 'Blok Penilaian')->value('id');
         $aturanIds = DB::table('aturan_kegiatan_blok')
             ->where('blok_id', $blokId)
             ->orderBy('urutan')

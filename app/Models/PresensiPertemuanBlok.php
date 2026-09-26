@@ -28,7 +28,51 @@ class PresensiPertemuanBlok extends Model
     /**
      * @var array<int, string>
      */
-    public const SEMUA_STATUS = ['hadir', 'sakit', 'izin', 'alpa'];
+    public const SEMUA_STATUS = ['hadir', 'izin', 'sakit', 'alpa', 'lain_lain', 'dispensasi'];
+
+    /**
+     * Metadata status untuk tampilan presensi dan dokumen.
+     *
+     * @var array<string, array{kode: string, label: string, deskripsi: string, warna: string}>
+     */
+    public const STATUS = [
+        'hadir' => [
+            'kode' => 'H',
+            'label' => 'Hadir',
+            'deskripsi' => 'Mahasiswa hadir mengikuti perkuliahan',
+            'warna' => 'success',
+        ],
+        'izin' => [
+            'kode' => 'I',
+            'label' => 'Izin',
+            'deskripsi' => 'Mahasiswa berhalangan hadir dengan izin resmi',
+            'warna' => 'info',
+        ],
+        'sakit' => [
+            'kode' => 'S',
+            'label' => 'Sakit',
+            'deskripsi' => 'Mahasiswa sakit dengan surat keterangan',
+            'warna' => 'warning',
+        ],
+        'alpa' => [
+            'kode' => 'A',
+            'label' => 'Alpa',
+            'deskripsi' => 'Mahasiswa tidak hadir tanpa keterangan',
+            'warna' => 'danger',
+        ],
+        'lain_lain' => [
+            'kode' => 'L',
+            'label' => 'Lain-lain',
+            'deskripsi' => 'Alasan kedinasan / kegiatan kampus',
+            'warna' => 'secondary',
+        ],
+        'dispensasi' => [
+            'kode' => 'D',
+            'label' => 'Dispensasi',
+            'deskripsi' => 'Dispensasi khusus pimpinan fakultas',
+            'warna' => 'primary',
+        ],
+    ];
 
     public function pertemuan_blok(): BelongsTo
     {

@@ -86,11 +86,7 @@ final class TableBlokOperasional extends Component
                 'pengelola_blok.dosen:id_dosen,nama',
             ])
             ->withCount(['peserta_blok', 'kelompok_blok', 'pertemuan_blok'])
-            ->when($search !== '', fn ($query) => $query->where(
-                fn ($query) => $query
-                    ->where('kode', 'like', "%{$search}%")
-                    ->orWhere('nama', 'like', "%{$search}%")
-            ))
+            ->when($search !== '', fn ($query) => $query->where('nama', 'like', "%{$search}%"))
             ->when($this->prodiId !== '', fn ($query) => $query->where('prodi_id', $this->prodiId))
             ->when($this->semesterId !== '', fn ($query) => $query->where('semester_id', $this->semesterId))
             ->orderByDesc('tanggal_mulai')

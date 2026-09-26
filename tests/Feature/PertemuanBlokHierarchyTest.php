@@ -31,7 +31,6 @@ class PertemuanBlokHierarchyTest extends TestCase
         $blok = DB::table('blok')->insertGetId([
             'prodi_id' => $prodi,
             'semester_id' => $semester,
-            'kode' => 'B-UJI',
             'nama' => 'Blok Uji',
             'sks' => 4,
         ]);

@@ -35,4 +35,9 @@ class Prodi extends Model
     {
         return $this->hasMany(Blok::class, 'prodi_id', 'id_prodi');
     }
+
+    public function kurikulum(): HasMany
+    {
+        return $this->hasMany(Kurikulum::class, 'prodi_id', 'id_prodi');
+    }
 }

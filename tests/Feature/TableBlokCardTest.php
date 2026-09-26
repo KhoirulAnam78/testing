@@ -28,7 +28,6 @@ class TableBlokCardTest extends TestCase
         $blokA = Blok::create([
             'prodi_id' => $prodiA->id_prodi,
             'semester_id' => $semester->id_semester,
-            'kode' => 'CARD-BLOK-A',
             'nama' => 'Blok Card Ditampilkan',
             'sks' => 4,
             'status' => 'aktif',
@@ -36,7 +35,6 @@ class TableBlokCardTest extends TestCase
         Blok::create([
             'prodi_id' => $prodiB->id_prodi,
             'semester_id' => $semester->id_semester,
-            'kode' => 'CARD-BLOK-B',
             'nama' => 'Blok Card Disembunyikan',
             'sks' => 3,
             'status' => 'draft',
@@ -49,7 +47,7 @@ class TableBlokCardTest extends TestCase
             ->assertSee('Blok Card Ditampilkan')
             ->assertSee('Blok Card Disembunyikan')
             ->assertSee('Mata Kuliah')
-            ->set('search', 'CARD-BLOK-A')
+            ->set('search', 'Ditampilkan')
             ->assertSee('Blok Card Ditampilkan')
             ->assertDontSee('Blok Card Disembunyikan')
             ->set('search', '')

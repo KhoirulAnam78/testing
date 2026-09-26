@@ -74,10 +74,7 @@ class AksesPertemuanBlok
     {
         return (int) ($user?->mahasiswa?->id_mahasiswa ?? 0) === $mahasiswaId
             && self::logbookAktif($pertemuanId)
-            && PertemuanBlok::query()
-                ->whereKey($pertemuanId)
-                ->whereHas('monitoring_pertemuan_blok')
-                ->exists()
+            && self::terkunci($pertemuanId)
             && self::mahasiswaAnggota($user, $pertemuanId);
     }
 
