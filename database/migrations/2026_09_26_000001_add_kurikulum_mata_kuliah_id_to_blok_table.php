@@ -1,0 +1,26 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::table('blok', function (Blueprint $table) {
+            $table->foreignId('kurikulum_mata_kuliah_id')
+                ->nullable()
+                ->after('mata_kuliah_id')
+                ->constrained('kurikulum_mata_kuliah', 'id_kurikulum_mata_kuliah')
+                ->restrictOnDelete();
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::table('blok', function (Blueprint $table) {
+            $table->dropConstrainedForeignId('kurikulum_mata_kuliah_id');
+        });
+    }
+};

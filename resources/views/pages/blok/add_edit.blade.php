@@ -6,7 +6,7 @@ use App\Models\Dosen;
 use App\Models\JenisKegiatan;
 use App\Models\KomponenPenilaian;
 use App\Models\KomponenPenilaianBlok;
-use App\Models\MataKuliah;
+use App\Models\KurikulumMataKuliah;
 use App\Models\MateriBlok;
 use App\Models\MateriRinciBlok;
 use App\Models\PengelolaBlok;
@@ -51,7 +51,9 @@ new #[Layout('layouts.app')] class extends Component
 
     public $mata_kuliah_id;
 
-    public $mata_kuliah = [];
+    public $kurikulum_mata_kuliah_id;
+
+    public $kurikulum_mata_kuliah = [];
 
     public $prodi = [];
 
@@ -83,7 +85,13 @@ new #[Layout('layouts.app')] class extends Component
         $this->semester = Semester::orderByDesc('tahun')->orderBy('nama')->get(['id_semester', 'nama', 'tahun', 'kode']);
         $this->dosen = Dosen::where('status', 'aktif')->orderBy('nama')->get(['id_dosen', 'nidn', 'nama', 'gelar_depan', 'gelar_belakang']);
         $this->jenis_kegiatan = JenisKegiatan::where('status', 'aktif')->orderBy('nama')->get(['id', 'kode', 'nama', 'jumlah_pertemuan_default', 'durasi_menit_default', 'sumber_nilai']);
-        $this->mata_kuliah = MataKuliah::where('status', 'aktif')->orderBy('nama')->get(['id', 'prodi_id', 'kode', 'nama', 'sks']);
+        $this->kurikulum_mata_kuliah = KurikulumMataKuliah::query()
+            ->with([
+                'mata_kuliah:id,prodi_id,kode,nama,sks,status',
+                'kurikulum:id_kurikulum,prodi_id,kode,nama,status',
+            ])
+            ->whereHas('mata_kuliah', fn ($query) => $query->where('status', 'aktif'))
+            ->get();
         $this->blok_copy_options = Blok::query()
             ->with(['prodi', 'semester'])
             ->orderByDesc('created_at')
@@ -123,6 +131,7 @@ new #[Layout('layouts.app')] class extends Component
             $this->tanggal_selesai = $blok->tanggal_selesai?->format('Y-m-d');
             $this->deskripsi = $blok->deskripsi;
             $this->mata_kuliah_id = $blok->mata_kuliah_id;
+            $this->kurikulum_mata_kuliah_id = $blok->kurikulum_mata_kuliah_id;
             $this->aturan = $blok->aturan_kegiatan_blok
                 ->sortBy('urutan')
                 ->map(fn ($item) => [
@@ -380,16 +389,20 @@ new #[Layout('layouts.app')] class extends Component
 
     public function updatedProdiId(): void
     {
+        $this->kurikulum_mata_kuliah_id = null;
         $this->mata_kuliah_id = null;
         $this->sks = null;
     }
 
-    public function updatedMataKuliahId(): void
+    public function updatedKurikulumMataKuliahId(): void
     {
-        $this->sks = $this->mata_kuliah
-            ->first(fn (MataKuliah $mataKuliah) => (int) $mataKuliah->id === (int) $this->mata_kuliah_id
-                && (int) $mataKuliah->prodi_id === (int) $this->prodi_id)
-            ?->sks;
+        $mapping = $this->kurikulum_mata_kuliah
+            ->first(fn (KurikulumMataKuliah $mapping) => (int) $mapping->id_kurikulum_mata_kuliah === (int) $this->kurikulum_mata_kuliah_id
+                && (int) $mapping->kurikulum?->prodi_id === (int) $this->prodi_id
+                && (int) $mapping->mata_kuliah?->prodi_id === (int) $this->prodi_id);
+
+        $this->mata_kuliah_id = $mapping?->mata_kuliah_id;
+        $this->sks = $mapping?->mata_kuliah?->sks;
     }
 
     public function setActiveTab(string $tab): void
@@ -420,8 +433,12 @@ new #[Layout('layouts.app')] class extends Component
     {
         $model = $selected['model'] ?? null;
 
-        if (in_array($model, ['koordinator_id', 'asisten_koordinator_id'], true)) {
+        if (in_array($model, ['koordinator_id', 'asisten_koordinator_id', 'kurikulum_mata_kuliah_id'], true)) {
             $this->{$model} = $selected['value'] ?: null;
+
+            if ($model === 'kurikulum_mata_kuliah_id') {
+                $this->updatedKurikulumMataKuliahId();
+            }
         }
     }
 
@@ -753,23 +770,28 @@ new #[Layout('layouts.app')] class extends Component
         return PerhitunganSksBlok::keSkala($nilai);
     }
 
-    private function pastikanMataKuliah(): MataKuliah
+    private function pastikanKurikulumMataKuliah(): KurikulumMataKuliah
     {
-        $mataKuliah = MataKuliah::query()
-            ->whereKey($this->mata_kuliah_id)
-            ->where('prodi_id', $this->prodi_id)
-            ->where('status', 'aktif')
+        $mapping = KurikulumMataKuliah::query()
+            ->with('mata_kuliah')
+            ->whereKey($this->kurikulum_mata_kuliah_id)
+            ->whereHas('kurikulum', fn ($query) => $query
+                ->where('prodi_id', $this->prodi_id))
+            ->whereHas('mata_kuliah', fn ($query) => $query
+                ->where('prodi_id', $this->prodi_id)
+                ->where('status', 'aktif'))
             ->first();
 
-        if (! $mataKuliah) {
+        if (! $mapping) {
             throw ValidationException::withMessages([
-                'mata_kuliah_id' => 'Mata kuliah harus aktif dan berada pada program studi yang sama dengan blok.',
+                'kurikulum_mata_kuliah_id' => 'Mata kuliah harus berasal dari kurikulum pada program studi yang sama dengan blok.',
             ]);
         }
 
-        $this->sks = $mataKuliah->sks;
+        $this->mata_kuliah_id = $mapping->mata_kuliah_id;
+        $this->sks = $mapping->mata_kuliah->sks;
 
-        return $mataKuliah;
+        return $mapping;
     }
 
     private function pastikanTotalSks(array $aturan): void
@@ -1036,8 +1058,7 @@ new #[Layout('layouts.app')] class extends Component
                 Rule::notIn(array_filter([$this->koordinator_id, $this->asisten_koordinator_id])),
             ],
             'nama' => ['required', 'string', 'max:255'],
-            'sks' => ['required', 'numeric', 'min:0.5', 'max:99.9'],
-            'mata_kuliah_id' => ['required', 'integer', 'exists:mata_kuliah,id'],
+            'kurikulum_mata_kuliah_id' => ['required', 'integer', 'exists:kurikulum_mata_kuliah,id_kurikulum_mata_kuliah'],
             'tanggal_mulai' => ['nullable', 'date'],
             'tanggal_selesai' => ['nullable', 'date', 'after_or_equal:tanggal_mulai'],
             'deskripsi' => ['nullable', 'string'],
@@ -1050,19 +1071,20 @@ new #[Layout('layouts.app')] class extends Component
             'selected_kontributor_ids.*.distinct' => 'Kontributor tidak boleh duplikat.',
             'selected_kontributor_ids.*.not_in' => 'Kontributor harus berbeda dari koordinator dan asisten koordinator.',
             'nama.required' => 'Nama blok wajib diisi.',
-            'mata_kuliah_id.required' => 'Mata kuliah wajib dipilih.',
+            'kurikulum_mata_kuliah_id.required' => 'Mata kuliah pada kurikulum wajib dipilih.',
             'tanggal_selesai.after_or_equal' => 'Tanggal selesai tidak boleh sebelum tanggal mulai.',
         ]);
 
         DB::transaction(function () use ($payload) {
-            $mataKuliah = $this->pastikanMataKuliah();
+            $mapping = $this->pastikanKurikulumMataKuliah();
             $blokPayload = collect($payload)->except([
                 'koordinator_id',
                 'asisten_koordinator_id',
                 'selected_kontributor_ids',
             ])->toArray();
-            $blokPayload['mata_kuliah_id'] = $mataKuliah->id;
-            $blokPayload['sks'] = $mataKuliah->sks;
+            $blokPayload['kurikulum_mata_kuliah_id'] = $mapping->id_kurikulum_mata_kuliah;
+            $blokPayload['mata_kuliah_id'] = $mapping->mata_kuliah_id;
+            $blokPayload['sks'] = $mapping->mata_kuliah->sks;
             $blokPayload['status'] = 'aktif';
             if (! $this->edit_id) {
                 $blokPayload['kode'] = bin2hex(random_bytes(16));
@@ -1336,8 +1358,7 @@ new #[Layout('layouts.app')] class extends Component
                     Rule::notIn(array_filter([$this->koordinator_id, $this->asisten_koordinator_id])),
                 ],
                 'nama' => ['required', 'string', 'max:255'],
-                'sks' => ['required', 'numeric', 'min:0.5', 'max:99.9'],
-                'mata_kuliah_id' => ['required', 'integer', 'exists:mata_kuliah,id'],
+                'kurikulum_mata_kuliah_id' => ['required', 'integer', 'exists:kurikulum_mata_kuliah,id_kurikulum_mata_kuliah'],
                 'tanggal_mulai' => ['nullable', 'date'],
                 'tanggal_selesai' => ['nullable', 'date', 'after_or_equal:tanggal_mulai'],
                 'deskripsi' => ['nullable', 'string'],
@@ -1390,8 +1411,7 @@ new #[Layout('layouts.app')] class extends Component
                 'selected_kontributor_ids.*.not_in' => 'Kontributor harus berbeda dari koordinator dan asisten koordinator.',
                 'selected_kontributor_ids.*.exists' => 'Kontributor tidak valid.',
                 'nama.required' => 'Nama blok wajib diisi.',
-                'sks.required' => 'SKS wajib diisi.',
-                'mata_kuliah_id.required' => 'Mata kuliah wajib dipilih.',
+                'kurikulum_mata_kuliah_id.required' => 'Mata kuliah pada kurikulum wajib dipilih.',
                 'tanggal_selesai.after_or_equal' => 'Tanggal selesai tidak boleh sebelum tanggal mulai.',
                 'aturan.required' => 'Aturan kegiatan blok wajib diisi.',
                 'aturan.*.jenis_kegiatan_id.required' => 'Jenis kegiatan wajib dipilih.',
@@ -1425,7 +1445,7 @@ new #[Layout('layouts.app')] class extends Component
         }
 
         try {
-            $this->pastikanMataKuliah();
+            $this->pastikanKurikulumMataKuliah();
             $this->pastikanTotalSks($payload['aturan']);
         } catch (ValidationException $exception) {
             $this->active_tab = $this->tabForValidationErrors($exception->validator->errors()->keys());
@@ -1509,7 +1529,7 @@ new #[Layout('layouts.app')] class extends Component
         }
 
         DB::transaction(function () use ($payload) {
-            $mataKuliah = $this->pastikanMataKuliah();
+            $mapping = $this->pastikanKurikulumMataKuliah();
             $this->pastikanTotalSks($payload['aturan']);
             $blokPayload = collect($payload)->except([
                 'aturan',
@@ -1517,8 +1537,9 @@ new #[Layout('layouts.app')] class extends Component
                 'asisten_koordinator_id',
                 'selected_kontributor_ids',
             ])->toArray();
-            $blokPayload['mata_kuliah_id'] = $mataKuliah->id;
-            $blokPayload['sks'] = $mataKuliah->sks;
+            $blokPayload['kurikulum_mata_kuliah_id'] = $mapping->id_kurikulum_mata_kuliah;
+            $blokPayload['mata_kuliah_id'] = $mapping->mata_kuliah_id;
+            $blokPayload['sks'] = $mapping->mata_kuliah->sks;
 
             if (! $this->edit_id) {
                 $blokPayload['status'] = 'aktif';
@@ -1839,20 +1860,23 @@ new #[Layout('layouts.app')] class extends Component
                             </div>
                             <div class="col-xl-4">
                                 <div class="border rounded p-3 h-100">
-                                    @error('mata_kuliah_id') <div class="alert alert-danger py-2 alert-dismissible fade show" role="alert"><button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Tutup"></button>{{ $message }}</div> @enderror
+                                    @error('kurikulum_mata_kuliah_id') <div class="alert alert-danger py-2 alert-dismissible fade show" role="alert"><button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Tutup"></button>{{ $message }}</div> @enderror
 
                                     @if (empty($prodi_id))
                                         <div class="alert alert-info mb-0 alert-dismissible fade show" role="alert">
                                             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Tutup"></button>
                                             Pilih program studi terlebih dahulu untuk menampilkan mata kuliah.</div>
                                     @else
-                                        <label class="form-label">Mata Kuliah</label>
-                                        <select class="form-select" wire:model.live="mata_kuliah_id">
-                                            <option value="">Pilih mata kuliah</option>
-                                            @foreach ($mata_kuliah->where('prodi_id', (int) $prodi_id) as $item)
-                                                <option value="{{ $item->id }}">{{ $item->kode }} - {{ $item->nama }} ({{ number_format((float) $item->sks, 1, ',', '.') }} SKS)</option>
-                                            @endforeach
-                                        </select>
+                                        <livewire:dropdown.select-search
+                                            wire_model="kurikulum_mata_kuliah_id"
+                                            label="Mata Kuliah Kurikulum"
+                                            :options="$kurikulum_mata_kuliah->filter(fn ($item) => (int) $item->kurikulum?->prodi_id === (int) $prodi_id && (int) $item->mata_kuliah?->prodi_id === (int) $prodi_id)->map(fn ($item) => [
+                                                'value' => (string) $item->id_kurikulum_mata_kuliah,
+                                                'label' => $item->mata_kuliah->kode.' - '.$item->mata_kuliah->nama.PHP_EOL.'Kurikulum: '.$item->kurikulum->nama,
+                                            ])->values()->all()"
+                                            :selected="$kurikulum_mata_kuliah_id"
+                                            :key="'kurikulum-mata-kuliah-'.$prodi_id.'-'.$edit_id"
+                                        />
                                         <div class="mt-3">
                                             <label class="form-label">SKS Mata Kuliah</label>
                                             <input type="text" class="form-control" value="{{ $sks ? number_format((float) $sks, 1, ',', '.') : '-' }}" readonly>

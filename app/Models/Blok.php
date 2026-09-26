@@ -23,6 +23,7 @@ class Blok extends Model
     protected function casts(): array
     {
         return [
+            'kurikulum_mata_kuliah_id' => 'integer',
             'tanggal_mulai' => 'date',
             'tanggal_selesai' => 'date',
             'kehadiran_masuk_dpna' => 'boolean',
@@ -115,6 +116,11 @@ class Blok extends Model
     public function mata_kuliah(): BelongsTo
     {
         return $this->belongsTo(MataKuliah::class, 'mata_kuliah_id', 'id');
+    }
+
+    public function kurikulum_mata_kuliah(): BelongsTo
+    {
+        return $this->belongsTo(KurikulumMataKuliah::class, 'kurikulum_mata_kuliah_id', 'id_kurikulum_mata_kuliah');
     }
 
     /**

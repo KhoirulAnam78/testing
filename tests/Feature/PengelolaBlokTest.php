@@ -4,9 +4,13 @@ namespace Tests\Feature;
 
 use App\Models\Blok;
 use App\Models\Dosen;
+use App\Models\Kurikulum;
+use App\Models\KurikulumMataKuliah;
+use App\Models\MataKuliah;
 use App\Models\PengelolaBlok;
 use App\Models\Prodi;
 use App\Models\Semester;
+use App\Models\SkalaNilai;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -28,10 +32,12 @@ class PengelolaBlokTest extends TestCase
     public function test_form_menyimpan_dan_menyinkronkan_banyak_kontributor(): void
     {
         [$prodi, $semester] = $this->akademik();
+        $mapping = $this->mapping($prodi);
         [$koordinator, $asisten, $kontributorA, $kontributorB] = $this->dosen(4);
 
         $component = Livewire::test('pages::blok.add_edit', ['id' => 'add'])
             ->set('prodi_id', (string) $prodi->id_prodi)
+            ->set('kurikulum_mata_kuliah_id', (string) $mapping->id_kurikulum_mata_kuliah)
             ->set('semester_id', (string) $semester->id_semester)
             ->set('koordinator_id', (string) $koordinator->id_dosen)
             ->set('asisten_koordinator_id', (string) $asisten->id_dosen)
@@ -45,6 +51,8 @@ class PengelolaBlokTest extends TestCase
             ->assertHasNoErrors();
 
         $blok = Blok::where('nama', 'Blok Pengelola')->sole();
+        $this->assertSame($mapping->id_kurikulum_mata_kuliah, $blok->kurikulum_mata_kuliah_id);
+        $this->assertSame($mapping->mata_kuliah_id, $blok->mata_kuliah_id);
         $this->assertEqualsCanonicalizing([
             [$koordinator->id_dosen, 'koordinator'],
             [$asisten->id_dosen, 'asisten_koordinator'],
@@ -84,6 +92,37 @@ class PengelolaBlokTest extends TestCase
             ->assertHasErrors(['selected_kontributor_ids.0']);
 
         $this->assertDatabaseMissing('blok', ['nama' => 'Blok Duplikat']);
+    }
+
+    public function test_mapping_mata_kuliah_harus_sesuai_prodi_dan_menyinkronkan_kedua_id(): void
+    {
+        [$prodi, $semester] = $this->akademik();
+        $prodiLain = Prodi::create(['kode' => 'PL', 'nama' => 'Prodi Lain']);
+        $mappingLain = $this->mapping($prodiLain, 'L');
+        $mapping = $this->mapping($prodi);
+        [$koordinator, $asisten] = $this->dosen(2);
+
+        $component = Livewire::test('pages::blok.add_edit', ['id' => 'add'])
+            ->set('prodi_id', (string) $prodi->id_prodi)
+            ->set('semester_id', (string) $semester->id_semester)
+            ->set('koordinator_id', (string) $koordinator->id_dosen)
+            ->set('asisten_koordinator_id', (string) $asisten->id_dosen)
+            ->set('nama', 'Blok Kurikulum')
+            ->set('kurikulum_mata_kuliah_id', (string) $mappingLain->id_kurikulum_mata_kuliah)
+            ->call('saveCurrentTab')
+            ->assertHasErrors(['kurikulum_mata_kuliah_id']);
+
+        $component
+            ->set('kurikulum_mata_kuliah_id', (string) $mapping->id_kurikulum_mata_kuliah)
+            ->call('saveCurrentTab')
+            ->assertHasNoErrors();
+
+        $this->assertDatabaseHas('blok', [
+            'nama' => 'Blok Kurikulum',
+            'prodi_id' => $prodi->id_prodi,
+            'kurikulum_mata_kuliah_id' => $mapping->id_kurikulum_mata_kuliah,
+            'mata_kuliah_id' => $mapping->mata_kuliah_id,
+        ]);
     }
 
     public function test_database_menolak_dosen_duplikat_dalam_blok_yang_sama(): void
@@ -144,6 +183,38 @@ class PengelolaBlokTest extends TestCase
             'semester_id' => $semester->id_semester,
             'nama' => 'Blok Pengelola',
             'sks' => 4,
+        ]);
+    }
+
+    private function mapping(Prodi $prodi, string $suffix = 'A'): KurikulumMataKuliah
+    {
+        $skala = SkalaNilai::create([
+            'nama' => "Skala {$suffix}",
+            'versi' => 1,
+            'aktif' => true,
+        ]);
+        $kurikulum = Kurikulum::create([
+            'prodi_id' => $prodi->id_prodi,
+            'skala_nilai_id' => $skala->id_skala_nilai,
+            'kode' => "KUR-{$suffix}",
+            'nama' => "Kurikulum {$suffix}",
+            'tahun_berlaku' => 2026,
+            'sks_lulus' => 144,
+            'semester_normal' => 8,
+            'status' => 'aktif',
+        ]);
+        $mataKuliah = MataKuliah::create([
+            'prodi_id' => $prodi->id_prodi,
+            'kode' => "MK-{$suffix}",
+            'nama' => "Mata Kuliah {$suffix}",
+            'sks' => 4,
+            'status' => 'aktif',
+        ]);
+
+        return KurikulumMataKuliah::create([
+            'kurikulum_id' => $kurikulum->id_kurikulum,
+            'mata_kuliah_id' => $mataKuliah->id,
+            'semester_urutan' => 1,
         ]);
     }
 
