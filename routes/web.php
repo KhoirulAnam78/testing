@@ -119,6 +119,8 @@ Route::middleware(['auth', 'route.permission'])->group(function () {
         ->name('kurikulum-saya.index');
     Route::livewire('khs-saya', 'pages::khs-saya.index')
         ->name('khs-saya.index');
+    Route::livewire('status-registrasi-saya', 'pages::status-registrasi-saya.index')
+        ->name('status-registrasi-saya.index');
 
     Route::livewire('rekap-sks-dosen', 'pages::rekap-sks-dosen.index')
         ->name('rekap-sks-dosen.index');

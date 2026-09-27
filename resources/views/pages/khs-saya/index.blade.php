@@ -26,37 +26,40 @@ new #[Layout('layouts.app')] class extends Component
         $mahasiswa = $this->mahasiswa()->load('kurikulum.skala_nilai.detail');
         $kurikulum = $mahasiswa->kurikulum;
 
-        if (! $kurikulum) {
-            return compact('mahasiswa', 'kurikulum') + ['khs' => collect()];
-        }
-
         $finalisasiTerbaru = DB::table('finalisasi_dpna_blok')
             ->selectRaw('blok_id, MAX(versi) as versi')
             ->groupBy('blok_id');
 
-        $detailSkala = $kurikulum->skala_nilai?->detail ?? collect();
-        $nilai = DB::table('snapshot_dpna_peserta as snapshot')
-            ->join('finalisasi_dpna_blok as finalisasi', 'finalisasi.id_finalisasi_dpna_blok', '=', 'snapshot.finalisasi_dpna_blok_id')
-            ->joinSub($finalisasiTerbaru, 'finalisasi_terbaru', function ($join) {
-                $join->on('finalisasi_terbaru.blok_id', '=', 'finalisasi.blok_id')
-                    ->on('finalisasi_terbaru.versi', '=', 'finalisasi.versi');
-            })
-            ->join('blok', 'blok.id', '=', 'finalisasi.blok_id')
+        $detailSkala = $kurikulum?->skala_nilai?->detail ?? collect();
+        $nilai = DB::table('peserta_blok as peserta')
+            ->join('blok', 'blok.id', '=', 'peserta.blok_id')
             ->join('semester', 'semester.id_semester', '=', 'blok.semester_id')
+            ->leftJoinSub($finalisasiTerbaru, 'finalisasi_terbaru', 'finalisasi_terbaru.blok_id', '=', 'blok.id')
+            ->leftJoin('finalisasi_dpna_blok as finalisasi', function ($join) {
+                $join->on('finalisasi.blok_id', '=', 'finalisasi_terbaru.blok_id')
+                    ->on('finalisasi.versi', '=', 'finalisasi_terbaru.versi')
+                    ->where('finalisasi.status', 'final');
+            })
+            ->leftJoin('snapshot_dpna_peserta as snapshot', function ($join) use ($mahasiswa) {
+                $join->on('snapshot.finalisasi_dpna_blok_id', '=', 'finalisasi.id_finalisasi_dpna_blok')
+                    ->on('snapshot.peserta_blok_id', '=', 'peserta.id_peserta_blok')
+                    ->where('snapshot.nim', $mahasiswa->nim);
+            })
             ->leftJoin('kurikulum_mata_kuliah as kurikulum_blok', 'kurikulum_blok.id_kurikulum_mata_kuliah', '=', 'blok.kurikulum_mata_kuliah_id')
             ->leftJoin('mata_kuliah as mata_kuliah_kurikulum', 'mata_kuliah_kurikulum.id', '=', 'kurikulum_blok.mata_kuliah_id')
             ->leftJoin('mata_kuliah as mata_kuliah_blok', 'mata_kuliah_blok.id', '=', 'blok.mata_kuliah_id')
-            ->where('snapshot.nim', $mahasiswa->nim)
-            ->where('finalisasi.status', 'final')
-            ->selectRaw('snapshot.id_snapshot_dpna_peserta, snapshot.nilai_akhir, semester.id_semester as semester_id, semester.kode as semester_kode, semester.nama as semester_nama, semester.tahun as semester_tahun, COALESCE(mata_kuliah_kurikulum.kode, mata_kuliah_blok.kode) as mata_kuliah_kode, COALESCE(mata_kuliah_kurikulum.nama, mata_kuliah_blok.nama, blok.nama) as mata_kuliah_nama, COALESCE(mata_kuliah_kurikulum.sks, mata_kuliah_blok.sks, blok.sks) as sks')
+            ->where('peserta.mahasiswa_id', $mahasiswa->id_mahasiswa)
+            ->whereNull('peserta.deleted_at')
+            ->whereIn('peserta.status', ['aktif', 'mengulang', 'selesai'])
+            ->selectRaw('peserta.id_peserta_blok, snapshot.nilai_akhir, semester.id_semester as semester_id, semester.kode as semester_kode, semester.nama as semester_nama, semester.tahun as semester_tahun, COALESCE(mata_kuliah_kurikulum.kode, mata_kuliah_blok.kode) as mata_kuliah_kode, COALESCE(mata_kuliah_kurikulum.nama, mata_kuliah_blok.nama, blok.nama) as mata_kuliah_nama, COALESCE(mata_kuliah_kurikulum.sks, mata_kuliah_blok.sks, blok.sks) as sks')
             ->orderByDesc('semester.kode')
             ->orderBy('mata_kuliah_nama')
             ->get()
             ->map(function ($item) use ($detailSkala) {
-                $nilaiAkhir = (float) $item->nilai_akhir;
+                $nilaiAkhir = $item->nilai_akhir === null ? null : (float) $item->nilai_akhir;
                 $item->nilai_akhir = $nilaiAkhir;
                 $item->sks = (float) $item->sks;
-                $item->detail_nilai = $detailSkala->first(
+                $item->detail_nilai = $nilaiAkhir === null ? null : $detailSkala->first(
                     fn ($detail) => $nilaiAkhir >= (float) $detail->nilai_angka_min
                         && $nilaiAkhir <= (float) $detail->nilai_angka_max
                 );
@@ -98,8 +101,10 @@ new #[Layout('layouts.app')] class extends Component
 
     @if (! $kurikulum)
         <div class="alert alert-warning">Kurikulum mahasiswa belum ditetapkan.</div>
-    @elseif ($khs->isEmpty())
-        <div class="alert alert-info">Belum ada nilai DPNA final.</div>
+    @endif
+
+    @if ($khs->isEmpty())
+        <div class="alert alert-info">Belum ada kontrak blok.</div>
     @else
         @foreach ($khs as $semester)
             <div class="card mb-3" wire:key="khs-semester-{{ $semester->id }}">
@@ -130,12 +135,12 @@ new #[Layout('layouts.app')] class extends Component
                             </thead>
                             <tbody>
                                 @foreach ($semester->mata_kuliah as $item)
-                                    <tr wire:key="khs-nilai-{{ $item->id_snapshot_dpna_peserta }}">
+                                    <tr wire:key="khs-nilai-{{ $item->id_peserta_blok }}">
                                         <td class="text-center">{{ $loop->iteration }}</td>
                                         <td>{{ $item->mata_kuliah_kode ?? '-' }}</td>
                                         <td>{{ $item->mata_kuliah_nama }}</td>
                                         <td class="text-center">{{ number_format($item->sks, 1, ',', '.') }}</td>
-                                        <td class="text-center">{{ number_format($item->nilai_akhir, 2, ',', '.') }}</td>
+                                        <td class="text-center">{{ $item->nilai_akhir === null ? '-' : number_format($item->nilai_akhir, 2, ',', '.') }}</td>
                                         <td class="text-center">{{ $item->detail_nilai?->nilai_huruf ?? '-' }}</td>
                                         <td class="text-center">{{ $item->detail_nilai ? number_format((float) $item->detail_nilai->nilai_indeks, 2, ',', '.') : '-' }}</td>
                                         <td class="text-center">
@@ -155,6 +160,6 @@ new #[Layout('layouts.app')] class extends Component
                 </div>
             </div>
         @endforeach
-        <div class="text-muted small">KHS hanya menampilkan nilai dari versi DPNA terbaru yang berstatus final.</div>
+        <div class="text-muted small">Semua kontrak blok ditampilkan. Nilai tersedia setelah versi DPNA terbaru berstatus final.</div>
     @endif
 </div>
