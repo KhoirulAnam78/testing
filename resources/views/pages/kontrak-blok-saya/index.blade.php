@@ -151,23 +151,25 @@ new #[Layout('layouts.app')] class extends Component
                             <div class="d-flex justify-content-between gap-2">
                                 <div>
                                     <h5 class="mb-1">{{ $blok->nama }}</h5>
-                                    <div class="text-muted small">{{ $blok->kode }} · {{ $blok->mata_kuliah?->nama ?? 'Mata kuliah belum dipetakan' }} · {{ $blok->sks }} SKS</div>
+                                    <div class="text-muted small">{{ $blok->mata_kuliah?->nama ?? 'Mata kuliah belum dipetakan' }} · {{ $blok->sks }} SKS</div>
                                 </div>
                                 @if ($kontrak)
                                     <span class="badge bg-success-subtle text-success align-self-start">{{ ucfirst($kontrak->status) }}</span>
-                                @elseif ($hasil['layak'])
-                                    <span class="badge bg-primary-subtle text-primary align-self-start">{{ $hasil['status'] === 'mengulang' ? 'Pengulangan' : 'Pertama' }}</span>
-                                @else
-                                    <span class="badge bg-secondary-subtle text-secondary align-self-start">Belum Layak</span>
                                 @endif
                             </div>
 
-                            @if (! $kontrak && ! $hasil['layak'])
-                                <ul class="text-danger small mt-3 mb-0 ps-3">
-                                    @foreach ($hasil['alasan'] as $alasan)
-                                        <li>{{ $alasan }}</li>
-                                    @endforeach
-                                </ul>
+                            @if (! $kontrak)
+                                @if ($hasil['layak'])
+                                    <div class="text-success small mt-3">
+                                        Memenuhi syarat kontrak sebagai {{ $hasil['status'] === 'mengulang' ? 'pengambilan ulang' : 'pengambilan pertama' }}.
+                                    </div>
+                                @else
+                                    <ul class="text-danger small mt-3 mb-0 ps-3">
+                                        @foreach ($hasil['alasan'] as $alasan)
+                                            <li>{{ $alasan }}</li>
+                                        @endforeach
+                                    </ul>
+                                @endif
                             @endif
 
                             <div class="mt-auto pt-3 text-end">
