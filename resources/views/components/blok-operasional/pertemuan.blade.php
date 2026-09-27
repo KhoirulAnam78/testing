@@ -1059,14 +1059,6 @@ new class extends Component
                             </div>
                         @endif
 
-                        <div class="mb-3">
-                            <label class="form-label">Cari Dosen Pengampu</label>
-                            <div class="input-group">
-                                <span class="input-group-text"><i class="ri-search-line"></i></span>
-                                <input type="text" class="form-control" placeholder="Ketik nama, NIDN, atau NIP dosen" wire:model.live.debounce.400ms="dosen_search">
-                            </div>
-                        </div>
-
                         @foreach ($kelompokOptions as $kelompok)
                             @php($id = $kelompok->id_kelompok_blok)
                             @php($dosenTerpilih = array_map('strval', $mapping_dosen_ids[$id] ?? []))
@@ -1076,6 +1068,42 @@ new class extends Component
                                     <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
                                         <div class="fw-semibold"><i class="ri-group-line"></i> {{ $kelompok->kode }} - {{ $kelompok->nama }}</div>
                                         <span class="badge bg-primary">{{ $kelompok->anggota_kelompok_blok_count }} anggota</span>
+                                    </div>
+                                </div>
+
+                                <div class="px-3 pt-3">
+                                    <div class="mb-3">
+                                        <label class="form-label">Cari Dosen Pengampu</label>
+                                        <div class="input-group">
+                                            <span class="input-group-text"><i class="ri-search-line"></i></span>
+                                            <input type="text" class="form-control" placeholder="Ketik nama, NIDN, atau NIP dosen" wire:model.live.debounce.400ms="dosen_search">
+                                        </div>
+                                    </div>
+
+                                    <label class="form-label fw-semibold">
+                                        <i class="ri-user-star-line text-success"></i> Dosen Pengampu
+                                        <span class="badge bg-info-subtle text-info ms-1">Bisa lebih dari satu</span>
+                                    </label>
+                                    <div class="text-muted small mb-2">Klik nama dosen untuk memilih. Klik kembali untuk membatalkan pilihan.</div>
+                                    @error('mapping_dosen_ids.'.$id) <div class="text-sm text-danger mb-1">{{ $message }}</div> @enderror
+                                    <div class="d-flex flex-wrap gap-2">
+                                        @foreach ($dosenOptions as $dosen)
+                                            @php($aktif = in_array((string) $dosen->id_dosen, $dosenTerpilih, true))
+                                            <button type="button"
+                                                class="btn btn-sm {{ $aktif ? 'btn-success' : 'btn-light' }}"
+                                                aria-pressed="{{ $aktif ? 'true' : 'false' }}"
+                                                wire:click="toggleDosen('{{ $id }}', '{{ $dosen->id_dosen }}')">
+                                                @if ($aktif)
+                                                    <i class="ri-check-line"></i>
+                                                @endif
+                                                {{ $dosen->nama }}
+                                            </button>
+                                        @endforeach
+                                        @if ($dosenOptions->isEmpty())
+                                            <div class="text-muted small">
+                                                {{ $dosen_search === '' ? 'Cari nama dosen terlebih dahulu, lalu pilih hasilnya.' : 'Tidak ada dosen aktif yang cocok.' }}
+                                            </div>
+                                        @endif
                                     </div>
                                 </div>
 
@@ -1104,34 +1132,6 @@ new class extends Component
                                         <label class="form-label">Catatan</label>
                                         <input type="text" class="form-control" wire:model="mapping_catatan.{{ $id }}">
                                         @error('mapping_catatan.'.$id) <div class="text-sm text-danger">{{ $message }}</div> @enderror
-                                    </div>
-                                </div>
-
-                                <div class="px-3 pb-3">
-                                    <label class="form-label fw-semibold">
-                                        <i class="ri-user-star-line text-success"></i> Dosen Pengampu
-                                        <span class="badge bg-info-subtle text-info ms-1">Bisa lebih dari satu</span>
-                                    </label>
-                                    <div class="text-muted small mb-2">Klik nama dosen untuk memilih. Klik kembali untuk membatalkan pilihan.</div>
-                                    @error('mapping_dosen_ids.'.$id) <div class="text-sm text-danger mb-1">{{ $message }}</div> @enderror
-                                    <div class="d-flex flex-wrap gap-2">
-                                        @foreach ($dosenOptions as $dosen)
-                                            @php($aktif = in_array((string) $dosen->id_dosen, $dosenTerpilih, true))
-                                            <button type="button"
-                                                class="btn btn-sm {{ $aktif ? 'btn-success' : 'btn-light' }}"
-                                                aria-pressed="{{ $aktif ? 'true' : 'false' }}"
-                                                wire:click="toggleDosen('{{ $id }}', '{{ $dosen->id_dosen }}')">
-                                                @if ($aktif)
-                                                    <i class="ri-check-line"></i>
-                                                @endif
-                                                {{ $dosen->nama }}
-                                            </button>
-                                        @endforeach
-                                        @if ($dosenOptions->isEmpty())
-                                            <div class="text-muted small">
-                                                {{ $dosen_search === '' ? 'Cari nama dosen terlebih dahulu, lalu pilih hasilnya.' : 'Tidak ada dosen aktif yang cocok.' }}
-                                            </div>
-                                        @endif
                                     </div>
                                 </div>
                             </div>
