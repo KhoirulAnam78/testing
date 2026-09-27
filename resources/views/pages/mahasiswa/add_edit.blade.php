@@ -94,6 +94,12 @@ new #[Layout('layouts.app')] class extends Component
         }
 
         DB::transaction(function () use (&$payload) {
+            $mahasiswa = $this->edit_id ? Mahasiswa::lockForUpdate()->findOrFail($this->edit_id) : null;
+
+            if ($mahasiswa && (int) $mahasiswa->prodi_id !== (int) $payload['prodi_id']) {
+                $payload['kurikulum_id'] = null;
+            }
+
             if ($payload['user_id']) {
                 $user = User::findOrFail($payload['user_id']);
                 $user->update([

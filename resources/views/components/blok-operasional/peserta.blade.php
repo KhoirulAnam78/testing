@@ -15,9 +15,13 @@ new class extends Component
     use WithPagination;
 
     public int $blok_id;
+
     public string $peserta_search = '';
+
     public string $kandidat_search = '';
+
     public array $kandidat_ids = [];
+
     public ?string $kandidat_kelas_id = null;
 
     public function mount($blok_id): void
@@ -364,6 +368,7 @@ new class extends Component
                         <thead>
                             <tr>
                                 <th>Mahasiswa</th>
+                                <th>Status Kontrak</th>
                                 @if ($rombelOptions->isNotEmpty())
                                     <th>Rombel</th>
                                 @endif
@@ -377,6 +382,15 @@ new class extends Component
                                     <td>
                                         <span class="fw-semibold">{{ $item->mahasiswa?->nama }}</span>
                                         <span class="text-muted d-block small">{{ $item->mahasiswa?->nim }}</span>
+                                    </td>
+                                    <td>
+                                        <span @class([
+                                            'badge',
+                                            'bg-primary-subtle text-primary' => $item->status === 'aktif',
+                                            'bg-warning-subtle text-warning' => $item->status === 'mengulang',
+                                            'bg-success-subtle text-success' => $item->status === 'selesai',
+                                            'bg-secondary-subtle text-secondary' => ! in_array($item->status, ['aktif', 'mengulang', 'selesai'], true),
+                                        ])>{{ ucfirst($item->status) }}</span>
                                     </td>
                                     @if ($rombelOptions->isNotEmpty())
                                         <td>
@@ -401,7 +415,7 @@ new class extends Component
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="{{ $rombelOptions->isNotEmpty() ? 4 : 3 }}" class="text-muted">
+                                    <td colspan="{{ $rombelOptions->isNotEmpty() ? 5 : 4 }}" class="text-muted">
                                         {{ $peserta_search ? 'Peserta tidak ditemukan.' : 'Belum ada peserta pada blok ini.' }}
                                     </td>
                                 </tr>

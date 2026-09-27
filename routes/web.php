@@ -80,6 +80,12 @@ Route::middleware(['auth', 'route.permission'])->group(function () {
     Route::livewire('kurikulum/add-or-edit/{id}', 'pages::kurikulum.add_edit')
         ->name('kurikulum.add_edit');
 
+    Route::livewire('kurikulum-mahasiswa', 'pages::kurikulum-mahasiswa.index')
+        ->name('kurikulum-mahasiswa.index');
+
+    Route::livewire('status-registrasi-mahasiswa', 'pages::status-registrasi-mahasiswa.index')
+        ->name('status-registrasi-mahasiswa.index');
+
     Route::livewire('skala-nilai', 'pages::skala-nilai.index')
         ->name('skala-nilai.index');
     Route::livewire('skala-nilai/add-or-edit/{id}', 'pages::skala-nilai.add_edit')
@@ -107,6 +113,8 @@ Route::middleware(['auth', 'route.permission'])->group(function () {
         ->name('rekap-sks-saya.index');
     Route::livewire('materi-saya', 'pages::materi-saya.index')
         ->name('materi-saya.index');
+    Route::livewire('kontrak-blok-saya', 'pages::kontrak-blok-saya.index')
+        ->name('kontrak-blok-saya.index');
 
     Route::livewire('rekap-sks-dosen', 'pages::rekap-sks-dosen.index')
         ->name('rekap-sks-dosen.index');

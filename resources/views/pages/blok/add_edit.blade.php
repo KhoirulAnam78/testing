@@ -1943,7 +1943,7 @@ new #[Layout('layouts.app')] class extends Component
                                                 @error("aturan.$index.durasi_menit") <div class="text-sm text-danger">{{ $message }}</div> @enderror
                                             </td>
                                             <td>
-                                                <input type="number" min="0.0001" max="9999.9999" step="0.0001" class="form-control" wire:model.live="aturan.{{ $index }}.bobot_sks" aria-label="Bobot SKS kegiatan {{ $index + 1 }}">
+                                                <input type="number" min="0.0001" max="9999.9999" step="0.0001" class="form-control" wire:model.live.debounce.1000ms="aturan.{{ $index }}.bobot_sks" aria-label="Bobot SKS kegiatan {{ $index + 1 }}">
                                                 @error("aturan.$index.bobot_sks") <div class="text-sm text-danger">{{ $message }}</div> @enderror
                                             </td>
                                             <td>

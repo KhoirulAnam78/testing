@@ -22,17 +22,26 @@ final class TableBlok extends Component
     public string $search = '';
 
     #[Url(as: 'prodi')]
+    public string $encryptedProdiId = '';
+
     public string $prodiId = '';
 
     #[Url(as: 'semester')]
+    public string $encryptedSemesterId = '';
+
     public string $semesterId = '';
 
     protected string $paginationTheme = 'bootstrap';
 
     public function mount(): void
     {
-        if (! request()->query->has('semester')) {
+        $this->prodiId = $this->decryptFilterId($this->encryptedProdiId);
+
+        if ($this->encryptedSemesterId !== '') {
+            $this->semesterId = $this->decryptFilterId($this->encryptedSemesterId);
+        } else {
             $this->semesterId = $this->semesterAktifId();
+            $this->encryptedSemesterId = $this->encryptFilterId($this->semesterId);
         }
     }
 
@@ -43,11 +52,25 @@ final class TableBlok extends Component
 
     public function updatedProdiId(): void
     {
+        $this->encryptedProdiId = $this->encryptFilterId($this->prodiId);
         $this->resetPage();
     }
 
     public function updatedSemesterId(): void
     {
+        $this->encryptedSemesterId = $this->encryptFilterId($this->semesterId);
+        $this->resetPage();
+    }
+
+    public function updatedEncryptedProdiId(): void
+    {
+        $this->prodiId = $this->decryptFilterId($this->encryptedProdiId);
+        $this->resetPage();
+    }
+
+    public function updatedEncryptedSemesterId(): void
+    {
+        $this->semesterId = $this->decryptFilterId($this->encryptedSemesterId);
         $this->resetPage();
     }
 
@@ -55,7 +78,31 @@ final class TableBlok extends Component
     {
         $this->reset('search', 'prodiId');
         $this->semesterId = $this->semesterAktifId();
+        $this->encryptedProdiId = '';
+        $this->encryptedSemesterId = $this->encryptFilterId($this->semesterId);
         $this->resetPage();
+    }
+
+    private function encryptFilterId(string $id): string
+    {
+        return $id === '' ? '' : Crypt::encrypt($id);
+    }
+
+    private function decryptFilterId(string $encryptedId): string
+    {
+        if ($encryptedId === '') {
+            return '';
+        }
+
+        try {
+            $id = Crypt::decrypt($encryptedId);
+        } catch (DecryptException) {
+            abort(404);
+        }
+
+        abort_unless((is_int($id) || (is_string($id) && ctype_digit($id))) && (int) $id > 0, 404);
+
+        return (string) $id;
     }
 
     private function semesterAktifId(): string

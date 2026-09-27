@@ -23,7 +23,17 @@ class Semester extends Model
     {
         return [
             'is_aktif' => 'boolean',
+            'kontrak_mulai' => 'datetime',
+            'kontrak_selesai' => 'datetime',
         ];
+    }
+
+    public function kontrakSedangDibuka(): bool
+    {
+        return $this->is_aktif
+            && $this->kontrak_mulai
+            && $this->kontrak_selesai
+            && now()->betweenIncluded($this->kontrak_mulai, $this->kontrak_selesai);
     }
 
     protected function tanggalMulai(): Attribute
@@ -81,5 +91,10 @@ class Semester extends Model
     public function blok(): HasMany
     {
         return $this->hasMany(Blok::class, 'semester_id', 'id_semester');
+    }
+
+    public function status_registrasi_mahasiswa(): HasMany
+    {
+        return $this->hasMany(StatusRegistrasiMahasiswa::class, 'semester_id', 'id_semester');
     }
 }

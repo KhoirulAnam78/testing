@@ -90,18 +90,24 @@ class MahasiswaImport implements SkipsEmptyRows, ToCollection, WithHeadingRow
 
                 $user->assignRole('mahasiswa');
 
+                $payload = [
+                    'user_id' => $user->id,
+                    'prodi_id' => $prodiId,
+                    'nim' => $nim,
+                    'nama' => $nama,
+                    'email' => $email,
+                    'no_hp' => $this->nullableString($row['no_hp'] ?? null),
+                    'angkatan' => (int) $angkatan,
+                    'status' => $status,
+                ];
+
+                if ($mahasiswa && (int) $mahasiswa->prodi_id !== (int) $prodiId) {
+                    $payload['kurikulum_id'] = null;
+                }
+
                 Mahasiswa::updateOrCreate(
                     ['id_mahasiswa' => $mahasiswa?->id_mahasiswa],
-                    [
-                        'user_id' => $user->id,
-                        'prodi_id' => $prodiId,
-                        'nim' => $nim,
-                        'nama' => $nama,
-                        'email' => $email,
-                        'no_hp' => $this->nullableString($row['no_hp'] ?? null),
-                        'angkatan' => (int) $angkatan,
-                        'status' => $status,
-                    ],
+                    $payload,
                 );
             }
         });

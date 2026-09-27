@@ -27,8 +27,26 @@ class Mahasiswa extends Model
         return $this->belongsTo(Prodi::class, 'prodi_id', 'id_prodi');
     }
 
+    public function kurikulum(): BelongsTo
+    {
+        return $this->belongsTo(Kurikulum::class, 'kurikulum_id', 'id_kurikulum')->withTrashed();
+    }
+
     public function peserta_blok(): HasMany
     {
         return $this->hasMany(PesertaBlok::class, 'mahasiswa_id', 'id_mahasiswa');
+    }
+
+    public function status_registrasi(): HasMany
+    {
+        return $this->hasMany(StatusRegistrasiMahasiswa::class, 'mahasiswa_id', 'id_mahasiswa');
+    }
+
+    public function memilikiRegistrasiAktifPada(int $semesterId): bool
+    {
+        return $this->status_registrasi()
+            ->where('semester_id', $semesterId)
+            ->where('status', 'aktif')
+            ->exists();
     }
 }

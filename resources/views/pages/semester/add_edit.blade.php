@@ -1,19 +1,31 @@
 <?php
 
 use App\Models\Semester;
+use Illuminate\Contracts\Encryption\DecryptException;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
-use Livewire\Component;
 use Livewire\Attributes\Layout;
+use Livewire\Component;
 
-new #[Layout('layouts.app')] class extends Component {
+new #[Layout('layouts.app')] class extends Component
+{
     public $edit_id;
+
     public $nama = 'ganjil';
+
     public $tahun;
+
     public $kode;
+
     public $tanggal_mulai;
+
     public $tanggal_selesai;
+
+    public $kontrak_mulai;
+
+    public $kontrak_selesai;
+
     public $is_aktif = false;
 
     public function mount($id): void
@@ -21,7 +33,7 @@ new #[Layout('layouts.app')] class extends Component {
         if ($id && $id !== 'add') {
             try {
                 $this->edit_id = Crypt::decrypt($id);
-            } catch (\Illuminate\Contracts\Encryption\DecryptException $e) {
+            } catch (DecryptException $e) {
                 abort(404, 'Enkripsi tidak valid !');
             }
 
@@ -31,6 +43,8 @@ new #[Layout('layouts.app')] class extends Component {
             $this->kode = $semester->kode;
             $this->tanggal_mulai = $semester->tanggal_mulai?->format('Y-m-d');
             $this->tanggal_selesai = $semester->tanggal_selesai?->format('Y-m-d');
+            $this->kontrak_mulai = $semester->kontrak_mulai?->format('Y-m-d\TH:i');
+            $this->kontrak_selesai = $semester->kontrak_selesai?->format('Y-m-d\TH:i');
             $this->is_aktif = (bool) $semester->is_aktif;
         }
     }
@@ -64,7 +78,7 @@ new #[Layout('layouts.app')] class extends Component {
         $value = trim($value);
 
         foreach (['Y-m-d', 'd/m/Y'] as $format) {
-            $date = \DateTimeImmutable::createFromFormat('!'.$format, $value);
+            $date = DateTimeImmutable::createFromFormat('!'.$format, $value);
 
             if ($date && $date->format($format) === $value) {
                 return $date->format('Y-m-d');
@@ -85,6 +99,8 @@ new #[Layout('layouts.app')] class extends Component {
             'kode' => ['required', 'string', 'max:255', Rule::unique('semester', 'kode')->ignore($this->edit_id, 'id_semester')],
             'tanggal_mulai' => ['nullable', 'date_format:Y-m-d'],
             'tanggal_selesai' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:tanggal_mulai'],
+            'kontrak_mulai' => ['nullable', 'date_format:Y-m-d\TH:i', 'required_with:kontrak_selesai'],
+            'kontrak_selesai' => ['nullable', 'date_format:Y-m-d\TH:i', 'required_with:kontrak_mulai', 'after_or_equal:kontrak_mulai'],
             'is_aktif' => ['boolean'],
         ], [
             'nama.required' => 'Nama semester wajib dipilih.',
@@ -96,6 +112,11 @@ new #[Layout('layouts.app')] class extends Component {
             'tanggal_mulai.date_format' => 'Format tanggal mulai tidak valid.',
             'tanggal_selesai.date_format' => 'Format tanggal selesai tidak valid.',
             'tanggal_selesai.after_or_equal' => 'Tanggal selesai tidak boleh sebelum tanggal mulai.',
+            'kontrak_mulai.required_with' => 'Waktu mulai dan selesai kontrak wajib diisi berpasangan.',
+            'kontrak_selesai.required_with' => 'Waktu mulai dan selesai kontrak wajib diisi berpasangan.',
+            'kontrak_mulai.date_format' => 'Format waktu mulai kontrak tidak valid.',
+            'kontrak_selesai.date_format' => 'Format waktu selesai kontrak tidak valid.',
+            'kontrak_selesai.after_or_equal' => 'Waktu selesai kontrak tidak boleh sebelum waktu mulai.',
         ]);
 
         DB::transaction(function () use ($payload) {
@@ -155,6 +176,20 @@ new #[Layout('layouts.app')] class extends Component {
                             <label class="form-label">Tanggal Selesai</label>
                             <input type="date" class="form-control" wire:model="tanggal_selesai">
                             @error('tanggal_selesai') <div class="text-sm text-danger">{{ $message }}</div> @enderror
+                        </div>
+                    </div>
+                    <hr>
+                    <h5>Jadwal Kontrak Blok</h5>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Kontrak Mulai</label>
+                            <input type="datetime-local" class="form-control" wire:model="kontrak_mulai">
+                            @error('kontrak_mulai') <div class="text-sm text-danger">{{ $message }}</div> @enderror
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Kontrak Selesai</label>
+                            <input type="datetime-local" class="form-control" wire:model="kontrak_selesai">
+                            @error('kontrak_selesai') <div class="text-sm text-danger">{{ $message }}</div> @enderror
                         </div>
                     </div>
                     <div class="form-check form-switch">
