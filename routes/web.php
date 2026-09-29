@@ -44,6 +44,10 @@ Route::middleware(['auth', 'route.permission'])->group(function () {
     Route::livewire('users/add-or-edit/{id}', 'pages::users.add_edit')
         ->name('users.add_edit');
 
+    // pengaturan API integrasi
+    Route::livewire('api-integrasi', 'pages::api-integrasi.index')
+        ->name('api-integrasi.index');
+
     // akademik - prodi
     Route::livewire('prodi', 'pages::prodi.index')
         ->name('prodi.index');

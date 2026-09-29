@@ -712,7 +712,8 @@ Ketentuan:
 - Timeout connect/request eksplisit `[KONFIRMASI OPERASIONAL]`.
 - Retry hanya untuk request idempotent atau request nilai dengan jaminan idempotensi yang sudah dikonfirmasi.
 - TLS verification tidak boleh dimatikan.
-- Base URL dan credential berasal dari environment.
+- Base URL dan credential dikelola admin melalui halaman API Integrasi. Password disimpan memakai encrypted cast Laravel dan tidak pernah ditampilkan kembali.
+- Token hasil login kelak disimpan sementara di cache sesuai masa aktif token, bukan di database.
 - Tambahkan feature flags `sync_enabled` dan `dpna_push_enabled`, default `false` sampai konfigurasi production diverifikasi.
 
 ---
@@ -746,15 +747,16 @@ Ketentuan:
 
 **Files:**
 
-- Modify: `config/services.php`
-- Modify: `.env.example`
+- Create: `app/Models/ApiIntegrasi.php`
+- Create: `resources/views/pages/api-integrasi/index.blade.php`
+- Create: migration tabel, menu, dan permission API Integrasi
 - Create: `app/Support/Akademik/AkademikClient.php`
 - Create: `app/Support/Akademik/AkademikGateway.php`
 - Create: DTO/result minimum sesuai kontrak nyata
 
 **Produces:** Client terisolasi dengan auth, timeout, pagination, error normalization, dan redaction.
 
-- [ ] Tambahkan config tanpa credential nyata.
+- [x] Tambahkan pengaturan base URL, URL login, username, password terenkripsi, status aktif, dan timeout khusus admin.
 - [ ] Implementasikan autentikasi sesuai kontrak.
 - [ ] Implementasikan satu primitive request dan parser envelope; jangan buat wrapper per endpoint bila parameter resource cukup.
 - [ ] Validasi status HTTP dan status bisnis.
