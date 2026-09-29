@@ -151,7 +151,7 @@ new class extends Component
         </div>
     @endif
 
-    <div class="dropdown py-2" style="width:100%" data-bs-auto-close="outside">
+    <div class="dropdown py-2" style="width:100%">
         <span class="form-control d-flex justify-content-between align-items-center" id="button_{{ $wire_model }}" role="button" data-bs-toggle="dropdown" aria-expanded="false">
             <span>{{ count($selected) ? count($selected).' data dipilih' : 'Pilih data' }}</span>
             <i class="ri-search-line"></i>
@@ -159,7 +159,7 @@ new class extends Component
 
         <ul class="dropdown-menu p-2" id="dropdown_{{ $wire_model }}" style="width: 100%; max-height: 360px; overflow-y: auto;" aria-labelledby="button_{{ $wire_model }}" wire:ignore.self>
             <li class="mb-2">
-                <input type="text" role="button" data-bs-toggle="dropdown" autofocus wire:model.live.debounce.500ms="search" class="form-control" placeholder="Cari...">
+                <input type="text" autofocus wire:model.live.debounce.500ms="search" class="form-control" placeholder="Cari...">
             </li>
 
             @forelse ($data as $item)
@@ -169,7 +169,7 @@ new class extends Component
                     $isUsedByOther = isset($item->blok_id) && $item->blok_id && (int) $item->blok_id !== (int) $currentValue;
                 @endphp
                 <li>
-                    <button type="button" class="dropdown-item d-flex gap-2 align-items-start rounded py-2" wire:click="toggleValue('{{ $item->{$colValue} }}')">
+                    <button type="button" class="dropdown-item d-flex gap-2 align-items-start rounded py-2" onclick="bootstrap.Dropdown.getOrCreateInstance(this.closest('.dropdown').firstElementChild).hide()" wire:click="toggleValue('{{ $item->{$colValue} }}')">
                         <input type="checkbox" class="form-check-input mt-1 pe-none" @checked($isSelected) tabindex="-1">
                         <span class="d-block">
                             <span class="fw-semibold d-block">{{ $item->{$colSearch} }}{{ $colSubtitle ? ' - '.$item->{$colSubtitle} : '' }}</span>
