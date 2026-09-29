@@ -50,25 +50,25 @@ new class extends Component
 <div>
     <label for="selectpicker">Pilih Route</label>
     <div class="dropdown py-2" style="width:100%">
-        <span class="form-control" id="button_{{ $wire_model }}" role="button" data-bs-toggle="dropdown"
+        <button type="button" class="form-control text-start" id="button_{{ $wire_model }}" data-bs-toggle="dropdown"
             aria-expanded="false">
             {{ $selected ?? 'Choose One' }}
-            </button>
-            <ul class="dropdown-menu" id="dropdown_{{ $wire_model }}" style="width: 100%"
-                aria-labelledby="button_{{ $wire_model }}" wire:ignore.self>
-                <li style="padding:5px"><input type="text" role="button" data-bs-toggle="dropdown" autofocus
-                        wire:model.live.debounce.500ms='search' class="form-control" placeholder="search..."></li>
-                @forelse ($data as $item)
-                    <li class="dropdown-item">
-                        <div style="width: 100%;" wire:click='selectValue("{{ $item }}")'>
-                            <span class="{{ $selected == $item ? 'fw-bold' : '' }}">
-                                {{ $item }}
-                            </span>
-                        </div>
-                    </li>
-                @empty
-                    <span class="dropdown-item">No data...</span>
-                @endforelse
-            </ul>
+        </button>
+        <ul class="dropdown-menu" id="dropdown_{{ $wire_model }}" style="width: 100%"
+            aria-labelledby="button_{{ $wire_model }}" wire:ignore.self>
+            <li style="padding:5px"><input type="text" autofocus
+                    wire:model.live.debounce.500ms='search' class="form-control" placeholder="search..."></li>
+            @forelse ($data as $item)
+                <li>
+                    <button type="button" class="dropdown-item" onclick="bootstrap.Dropdown.getOrCreateInstance(this.closest('.dropdown').firstElementChild).hide()" wire:click='selectValue("{{ $item }}")'>
+                        <span class="{{ $selected == $item ? 'fw-bold' : '' }}">
+                            {{ $item }}
+                        </span>
+                    </button>
+                </li>
+            @empty
+                <li><span class="dropdown-item">No data...</span></li>
+            @endforelse
+        </ul>
     </div>
 </div>
