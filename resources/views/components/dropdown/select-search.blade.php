@@ -123,14 +123,14 @@ new class extends Component
 
 <div>
     <label class="form-label">{{ $label }}</label>
-    <div class="dropdown py-2" style="width:100%" data-bs-auto-close="outside">
+    <div class="dropdown py-2" style="width:100%">
         <button type="button" class="form-control d-flex justify-content-between align-items-center text-start" id="button_{{ $wire_model }}" data-bs-toggle="dropdown" aria-expanded="false">
             <span style="white-space: pre-line;">{{ $selected ?? 'Pilih data' }}</span>
             <i class="ri-search-line"></i>
         </button>
         <ul class="dropdown-menu p-2" id="dropdown_{{ $wire_model }}" style="width: 100%; max-height: 360px; overflow-y: auto; z-index: 1055;" aria-labelledby="button_{{ $wire_model }}" wire:ignore.self>
             <li class="mb-2">
-                <input type="text" role="button" data-bs-toggle="dropdown" autofocus wire:model.live.debounce.500ms="search" class="form-control" placeholder="Cari...">
+                <input type="text" autofocus wire:model.live.debounce.500ms="search" class="form-control" placeholder="Cari...">
             </li>
             @forelse ($data as $item)
                 @php
@@ -138,7 +138,7 @@ new class extends Component
                     $itemLabel = $usesOptions ? data_get($item, $optionLabel) : $item->{$colSearch};
                 @endphp
                 <li>
-                    <button type="button" class="dropdown-item rounded {{ (string) $selectedValue === (string) $value ? 'fw-bold active' : '' }}" style="white-space: pre-line;" wire:click="selectValue('{{ $value }}')">
+                    <button type="button" class="dropdown-item rounded {{ (string) $selectedValue === (string) $value ? 'fw-bold active' : '' }}" style="white-space: pre-line;" onclick="bootstrap.Dropdown.getOrCreateInstance(this.closest('.dropdown').firstElementChild).hide()" wire:click="selectValue('{{ $value }}')">
                         {{ $itemLabel }}
                     </button>
                 </li>
