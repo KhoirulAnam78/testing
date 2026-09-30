@@ -32,6 +32,7 @@ $hasil = $map->invoke($service, [
     'hp_mhs' => '08123456789',
     'angkatan' => '2026',
     'kd_prodi' => '111',
+    'kd_kur' => 'S1DOK2025',
     'status' => 'A',
 ], ['111' => 7]);
 
@@ -43,6 +44,7 @@ if ($hasil !== [
     'angkatan' => 2026,
     'status' => 'aktif',
     'prodi_id' => 7,
+    'kode_kurikulum' => 'S1DOK2025',
 ]) {
     throw new RuntimeException('Mapping mahasiswa API tidak sesuai kontrak.');
 }
@@ -58,6 +60,7 @@ foreach ($status as $api => $lokal) {
 foreach ([
     ['email_mhs' => '', 'message' => 'Email kosong atau tidak valid.'],
     ['kd_prodi' => '999', 'message' => 'Kode prodi 999 tidak ditemukan pada data lokal.'],
+    ['kd_kur' => '', 'message' => 'Kode kurikulum kosong atau tidak valid.'],
     ['status' => '?', 'message' => 'Status mahasiswa API tidak dikenali.'],
 ] as $case) {
     try {
@@ -70,6 +73,7 @@ foreach ([
             'hp_mhs' => null,
             'angkatan' => '2026',
             'kd_prodi' => '111',
+            'kd_kur' => 'S1DOK2025',
             'status' => 'A',
         ], $case), ['111' => 7]);
         throw new RuntimeException('Data mahasiswa tidak valid diterima mapper.');
@@ -80,4 +84,11 @@ foreach ([
     }
 }
 
-echo "Mapping mahasiswa, status, email, prodi, dan metadata sinkronisasi valid.\n";
+if (! str_contains($source, "->where('prodi_id', \$data['prodi_id'])")
+    || ! str_contains($source, "->where('kode', \$data['kode_kurikulum'])")
+    || strpos($source, '$kurikulum = Kurikulum::query()') > strpos($source, '$mahasiswa = Mahasiswa::withTrashed()')
+) {
+    throw new RuntimeException('Pemetaan kurikulum mahasiswa tidak exact atau dijalankan setelah perubahan lokal.');
+}
+
+echo "Mapping mahasiswa, status, email, prodi, kurikulum exact, dan metadata sinkronisasi valid.\n";

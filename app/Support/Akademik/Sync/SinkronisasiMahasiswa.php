@@ -2,6 +2,7 @@
 
 namespace App\Support\Akademik\Sync;
 
+use App\Models\Kurikulum;
 use App\Models\Mahasiswa;
 use App\Models\Prodi;
 use App\Models\User;
@@ -276,7 +277,7 @@ final class SinkronisasiMahasiswa
     /**
      * @param  array<string, mixed>  $item
      * @param  array<string, int>  $prodi
-     * @return array{nim: string, nama: string, email: string, no_hp: ?string, angkatan: int, status: string, prodi_id: int}
+     * @return array{nim: string, nama: string, email: string, no_hp: ?string, angkatan: int, status: string, prodi_id: int, kode_kurikulum: string}
      */
     private function map(array $item, array $prodi): array
     {
@@ -284,6 +285,7 @@ final class SinkronisasiMahasiswa
         $nama = trim((string) ($item['nama'] ?? ''));
         $email = strtolower(trim((string) ($item['email_mhs'] ?? '')));
         $kodeProdi = trim((string) ($item['kd_prodi'] ?? ''));
+        $kodeKurikulum = trim((string) ($item['kd_kur'] ?? ''));
         $angkatan = trim((string) ($item['angkatan'] ?? ''));
 
         if ($nim === '' || strlen($nim) > 255 || $nama === '' || strlen($nama) > 255) {
@@ -296,6 +298,10 @@ final class SinkronisasiMahasiswa
 
         if (! array_key_exists($kodeProdi, $prodi)) {
             throw new DomainException("Kode prodi {$kodeProdi} tidak ditemukan pada data lokal.");
+        }
+
+        if ($kodeKurikulum === '' || strlen($kodeKurikulum) > 255) {
+            throw new DomainException('Kode kurikulum kosong atau tidak valid.');
         }
 
         if (! preg_match('/^\d{4}$/', $angkatan) || (int) $angkatan < 2000 || (int) $angkatan > 2100) {
@@ -311,6 +317,7 @@ final class SinkronisasiMahasiswa
             'angkatan' => (int) $angkatan,
             'status' => $this->mapStatus($item['status'] ?? null),
             'prodi_id' => $prodi[$kodeProdi],
+            'kode_kurikulum' => $kodeKurikulum,
         ];
     }
 
@@ -326,12 +333,24 @@ final class SinkronisasiMahasiswa
     }
 
     /**
-     * @param  array{nim: string, nama: string, email: string, no_hp: ?string, angkatan: int, status: string, prodi_id: int}  $data
+     * @param  array{nim: string, nama: string, email: string, no_hp: ?string, angkatan: int, status: string, prodi_id: int, kode_kurikulum: string}  $data
      * @return array{hasil: string, user: User}
      */
     private function simpan(array $data): array
     {
         return DB::transaction(function () use ($data): array {
+            $kurikulum = Kurikulum::query()
+                ->where('prodi_id', $data['prodi_id'])
+                ->where('kode', $data['kode_kurikulum'])
+                ->lockForUpdate()
+                ->first();
+
+            if ($kurikulum === null) {
+                throw new DomainException("Kurikulum {$data['kode_kurikulum']} untuk prodi mahasiswa tidak ditemukan.");
+            }
+
+            unset($data['kode_kurikulum']);
+            $data['kurikulum_id'] = $kurikulum->id_kurikulum;
             $mahasiswa = Mahasiswa::withTrashed()->where('nim', $data['nim'])->lockForUpdate()->first();
             $user = $mahasiswa?->user;
             $usernameConflict = User::query()->where('username', $data['nim'])
@@ -349,7 +368,6 @@ final class SinkronisasiMahasiswa
 
             $dibuat = $mahasiswa === null;
             $dipulihkan = $mahasiswa?->trashed() ?? false;
-            $prodiBerubah = $mahasiswa && (int) $mahasiswa->prodi_id !== $data['prodi_id'];
             $berubah = $mahasiswa && $this->mahasiswaBerubah($mahasiswa, $data);
 
             if (! $user) {
@@ -378,10 +396,6 @@ final class SinkronisasiMahasiswa
                 'status_sync' => Mahasiswa::STATUS_SYNC_SYNCED,
                 'synced_at' => now(),
             ];
-
-            if ($prodiBerubah) {
-                $payload['kurikulum_id'] = null;
-            }
 
             if ($mahasiswa) {
                 $mahasiswa->fill($payload);

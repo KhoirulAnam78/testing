@@ -11,11 +11,20 @@ class Kurikulum extends Model
 {
     use SoftDeletes;
 
+    public const STATUS_SYNC_PENDING = 'pending';
+
+    public const STATUS_SYNC_SYNCED = 'synced';
+
     protected $table = 'kurikulum';
 
     protected $primaryKey = 'id_kurikulum';
 
     protected $guarded = ['id_kurikulum'];
+
+    protected function casts(): array
+    {
+        return ['synced_at' => 'datetime'];
+    }
 
     public function prodi(): BelongsTo
     {
