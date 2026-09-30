@@ -39,11 +39,50 @@
                 <option value="">Semua status</option>
                 <option value="belum_diatur">Belum diatur</option>
                 <option value="aktif">Aktif</option>
+                <option value="belum_aktif">Belum aktif</option>
                 <option value="cuti">Cuti</option>
                 <option value="nonaktif">Nonaktif</option>
             </select>
         </div>
     </div>
+
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+        <div class="text-muted small">
+            Pembayaran lunas (L) disinkronkan sebagai Aktif. Mahasiswa lokal yang tidak ditemukan atau belum lunas menjadi Belum aktif.
+        </div>
+        <button
+            type="button"
+            class="btn btn-primary"
+            wire:click="sinkronkan"
+            wire:loading.attr="disabled"
+            wire:target="sinkronkan"
+            @disabled(! $filter_semester_id)
+        >
+            <span wire:loading.remove wire:target="sinkronkan"><i class="ri-refresh-line"></i> Sinkronkan Status</span>
+            <span wire:loading wire:target="sinkronkan">Sedang menyinkronkan...</span>
+        </button>
+    </div>
+
+    @error('filter_semester_id') <div class="alert alert-danger">{{ $message }}</div> @enderror
+
+    @if ($hasil_sinkronisasi)
+        <div class="alert {{ $hasil_sinkronisasi['status'] === 'success' ? 'alert-success' : 'alert-danger' }}">
+            <div class="fw-semibold">
+                Sinkronisasi {{ $hasil_sinkronisasi['semester'] }} · {{ $hasil_sinkronisasi['selesai_pada'] }}
+            </div>
+            <div class="small mt-1">{{ $hasil_sinkronisasi['pesan'] }}</div>
+            @if ($hasil_sinkronisasi['status'] === 'success')
+                <div class="d-flex flex-wrap gap-3 small mt-2">
+                    <span>Diterima: <strong>{{ $hasil_sinkronisasi['diterima'] }}</strong></span>
+                    <span>Dibuat: <strong>{{ $hasil_sinkronisasi['dibuat'] }}</strong></span>
+                    <span>Diubah: <strong>{{ $hasil_sinkronisasi['diubah'] }}</strong></span>
+                    <span>Tetap: <strong>{{ $hasil_sinkronisasi['tetap'] }}</strong></span>
+                    <span>Dilewati: <strong>{{ $hasil_sinkronisasi['dilewati'] }}</strong></span>
+                    <span>Gagal: <strong>{{ $hasil_sinkronisasi['gagal'] }}</strong></span>
+                </div>
+            @endif
+        </div>
+    @endif
 
     @if (! $filter_semester_id)
         <div class="alert alert-info mb-0">Pilih semester untuk melihat dan mengatur status registrasi.</div>
@@ -58,6 +97,7 @@
                         <th>Angkatan</th>
                         <th>Status Mahasiswa</th>
                         <th>Status Registrasi</th>
+                        <th>Data API</th>
                         <th class="text-end">Aksi</th>
                     </tr>
                 </thead>
@@ -73,6 +113,8 @@
                             <td>
                                 @if ($registrasi?->status === 'aktif')
                                     <span class="badge bg-success-subtle text-success">Aktif</span>
+                                @elseif ($registrasi?->status === 'belum_aktif')
+                                    <span class="badge bg-secondary-subtle text-secondary">Belum aktif</span>
                                 @elseif ($registrasi?->status === 'cuti')
                                     <span class="badge bg-warning-subtle text-warning">Cuti</span>
                                 @elseif ($registrasi?->status === 'nonaktif')
@@ -81,7 +123,26 @@
                                     <span class="badge bg-secondary-subtle text-secondary">Belum diatur</span>
                                 @endif
                             </td>
-                            <td class="text-end">
+                            <td class="small">
+                                @if ($registrasi?->last_synced_at)
+                                    <div>{{ $registrasi->jenis_registrasi ?? '-' }} · {{ $registrasi->status_bayar ?? 'Tidak ditemukan' }}</div>
+                                    <div class="text-muted">{{ $registrasi->last_synced_at->format('d-m-Y H:i:s') }}</div>
+                                @else
+                                    <span class="text-muted">Belum disinkronkan</span>
+                                @endif
+                            </td>
+                            <td class="text-end text-nowrap">
+                                <button
+                                    type="button"
+                                    class="btn btn-primary btn-sm"
+                                    wire:click="sinkronkanMahasiswa({{ $item->id_mahasiswa }})"
+                                    wire:loading.attr="disabled"
+                                    wire:target="sinkronkanMahasiswa({{ $item->id_mahasiswa }})"
+                                    @disabled($item->status === 'lulus')
+                                >
+                                    <span wire:loading.remove wire:target="sinkronkanMahasiswa({{ $item->id_mahasiswa }})"><i class="ri-refresh-line"></i> Sync</span>
+                                    <span wire:loading wire:target="sinkronkanMahasiswa({{ $item->id_mahasiswa }})">Sync...</span>
+                                </button>
                                 <button
                                     type="button"
                                     class="btn btn-info btn-sm"
@@ -93,7 +154,7 @@
                             </td>
                         </tr>
                     @empty
-                        <tr><td colspan="7" class="text-center text-muted py-4">Mahasiswa tidak ditemukan.</td></tr>
+                        <tr><td colspan="8" class="text-center text-muted py-4">Mahasiswa tidak ditemukan.</td></tr>
                     @endforelse
                 </tbody>
             </table>
@@ -120,6 +181,7 @@
                         <label class="form-label" for="edit-status">Status Registrasi</label>
                         <select id="edit-status" class="form-select" wire:model="edit_status">
                             <option value="aktif">Aktif</option>
+                            <option value="belum_aktif">Belum aktif</option>
                             <option value="cuti">Cuti</option>
                             <option value="nonaktif">Nonaktif</option>
                         </select>

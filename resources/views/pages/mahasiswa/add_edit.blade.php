@@ -86,6 +86,7 @@ new #[Layout('layouts.app')] class extends Component
         $payload['user_id'] = $payload['user_id'] ?: null;
         $payload['email'] = strtolower($payload['email']);
         $payload['nim'] = strtolower(trim($payload['nim']));
+        $payload['status_sync'] = Mahasiswa::STATUS_SYNC_PENDING;
 
         if (User::where('username', $payload['nim'])->when($payload['user_id'], fn ($query) => $query->whereKeyNot($payload['user_id']))->exists()) {
             $this->addError('nim', 'NIM sudah digunakan sebagai username.');

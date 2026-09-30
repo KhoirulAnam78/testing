@@ -2,29 +2,40 @@
 
 use App\Models\MataKuliah;
 use App\Models\Prodi;
+use Illuminate\Contracts\Encryption\DecryptException;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Validation\Rule;
-use Livewire\Component;
 use Livewire\Attributes\Layout;
+use Livewire\Component;
 
-new #[Layout('layouts.app')] class extends Component {
+new #[Layout('layouts.app')] class extends Component
+{
     public $edit_id;
+
     public $prodi_id;
+
     public $kode;
+
     public $nama;
+
     public $sks = 1;
+
     public $deskripsi;
+
     public $status = 'aktif';
+
     public $prodi = [];
 
     public function mount($id): void
     {
+        abort_unless(auth()->user()?->can($id === 'add' ? 'mata-kuliah:tambah' : 'mata-kuliah:edit'), 403);
+
         $this->prodi = Prodi::orderBy('nama')->get(['id_prodi', 'nama', 'kode']);
 
         if ($id && $id !== 'add') {
             try {
                 $this->edit_id = Crypt::decrypt($id);
-            } catch (\Illuminate\Contracts\Encryption\DecryptException $e) {
+            } catch (DecryptException $e) {
                 abort(404, 'Enkripsi tidak valid !');
             }
 
@@ -40,6 +51,8 @@ new #[Layout('layouts.app')] class extends Component {
 
     public function save()
     {
+        abort_unless(auth()->user()?->can($this->edit_id ? 'mata-kuliah:edit' : 'mata-kuliah:tambah'), 403);
+
         $payload = $this->validate([
             'prodi_id' => ['required', 'exists:prodi,id_prodi'],
             'kode' => ['required', 'string', 'max:255', Rule::unique('mata_kuliah', 'kode')->where('prodi_id', $this->prodi_id)->ignore($this->edit_id)],
@@ -64,6 +77,8 @@ new #[Layout('layouts.app')] class extends Component {
                 $payload['blok_id'] = null;
             }
         }
+
+        $payload['status_sync'] = MataKuliah::STATUS_SYNC_PENDING;
 
         MataKuliah::updateOrCreate(['id' => $this->edit_id], $payload);
         session()->flash('success', $this->edit_id ? 'Berhasil mengubah data' : 'Berhasil menambah data');

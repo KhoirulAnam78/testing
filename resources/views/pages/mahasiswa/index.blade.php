@@ -2,15 +2,28 @@
 
 use App\Exports\ArrayTemplateExport;
 use App\Imports\MahasiswaImport;
-use Livewire\Component;
+use App\Support\Akademik\Sync\SinkronisasiMahasiswa;
+use Illuminate\Support\Facades\Cache;
 use Livewire\Attributes\Layout;
+use Livewire\Attributes\Locked;
+use Livewire\Attributes\On;
+use Livewire\Component;
 use Livewire\WithFileUploads;
 use Maatwebsite\Excel\Facades\Excel;
 
-new #[Layout('layouts.app')] class extends Component {
+new #[Layout('layouts.app')] class extends Component
+{
     use WithFileUploads;
 
     public $importFile;
+
+    #[Locked]
+    public ?array $hasil_sinkronisasi = null;
+
+    public function mount(): void
+    {
+        $this->hasil_sinkronisasi = Cache::get(SinkronisasiMahasiswa::cacheKey());
+    }
 
     public function import()
     {
@@ -21,7 +34,7 @@ new #[Layout('layouts.app')] class extends Component {
             'importFile.mimes' => 'File import harus berformat xlsx, xls, atau csv.',
         ]);
 
-        Excel::import(new MahasiswaImport(), $this->importFile);
+        Excel::import(new MahasiswaImport, $this->importFile);
 
         $this->reset('importFile');
         session()->flash('success', 'Berhasil import data mahasiswa');
@@ -35,6 +48,58 @@ new #[Layout('layouts.app')] class extends Component {
             ['nim', 'nama', 'email', 'no_hp', 'kode_prodi', 'angkatan', 'status'],
             ['20260001', 'Nama Mahasiswa Contoh', 'mahasiswa@example.com', '081234567891', 'PSPD', '2026', 'aktif'],
         ]), 'template-import-mahasiswa.xlsx');
+    }
+
+    public function sinkronkan(SinkronisasiMahasiswa $sinkronisasi): void
+    {
+        abort_unless(
+            auth()->user()?->can('mahasiswa:tambah') && auth()->user()?->can('mahasiswa:edit'),
+            403
+        );
+
+        try {
+            $this->hasil_sinkronisasi = $sinkronisasi->handle();
+            $this->dispatch('mahasiswa-disinkronkan');
+            $this->dispatch('notify', message: [
+                'status' => 'success',
+                'message' => $this->hasil_sinkronisasi['pesan'],
+            ]);
+        } catch (DomainException $e) {
+            $this->simpanHasilGagal($e->getMessage());
+        } catch (Throwable $e) {
+            report($e);
+            $this->simpanHasilGagal('Sinkronisasi mahasiswa gagal. Periksa koneksi, data lokal, dan format API.');
+        }
+    }
+
+    #[On('mahasiswa-disinkronkan')]
+    public function muatHasilSinkronisasi(): void
+    {
+        $this->hasil_sinkronisasi = Cache::get(SinkronisasiMahasiswa::cacheKey());
+    }
+
+    private function simpanHasilGagal(string $pesan): void
+    {
+        $this->hasil_sinkronisasi = [
+            'status' => 'error',
+            'selesai_pada' => now()->format('d-m-Y H:i:s'),
+            'diterima' => 0,
+            'unik' => 0,
+            'dibuat' => 0,
+            'diubah' => 0,
+            'dipulihkan' => 0,
+            'tetap' => 0,
+            'dilewati' => 0,
+            'foto_disimpan' => 0,
+            'foto_tidak_tersedia' => 0,
+            'foto_dipertahankan' => 0,
+            'foto_gagal' => 0,
+            'rincian' => [],
+            'pesan' => $pesan,
+        ];
+
+        Cache::put(SinkronisasiMahasiswa::cacheKey(), $this->hasil_sinkronisasi, now()->addDays(30));
+        $this->dispatch('notify', message: ['status' => 'error', 'message' => $pesan]);
     }
 }; ?>
 
@@ -50,6 +115,59 @@ new #[Layout('layouts.app')] class extends Component {
             </div>
         </div>
     </div>
+
+    @if (auth()->user()?->can('mahasiswa:tambah') && auth()->user()?->can('mahasiswa:edit'))
+        <div class="row">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-1">Sinkronisasi Mahasiswa</h5>
+                        <p class="text-muted mb-0">Data akun dan mahasiswa diperbarui dari API berdasarkan NIM. Foto manual tetap dipertahankan. Data lokal yang hilang dari API tidak dihapus.</p>
+                    </div>
+                    <div class="card-body">
+                        <button type="button" class="btn btn-primary" wire:click="sinkronkan" wire:loading.attr="disabled" wire:target="sinkronkan">
+                            <span wire:loading.remove wire:target="sinkronkan"><i class="ri-refresh-line"></i> Sinkronkan Mahasiswa</span>
+                            <span wire:loading wire:target="sinkronkan">Sedang menyinkronkan...</span>
+                        </button>
+
+                        @if ($hasil_sinkronisasi)
+                            <div class="alert {{ $hasil_sinkronisasi['status'] === 'success' ? 'alert-success' : 'alert-danger' }} mt-3 mb-0" role="status">
+                                <div class="fw-semibold">Sinkronisasi {{ $hasil_sinkronisasi['selesai_pada'] }}</div>
+                                <div>{{ $hasil_sinkronisasi['pesan'] }}</div>
+                                @if ($hasil_sinkronisasi['status'] === 'success')
+                                    <div class="small mt-1">
+                                        Diterima: {{ $hasil_sinkronisasi['diterima'] }} ·
+                                        Unik: {{ $hasil_sinkronisasi['unik'] }} ·
+                                        Dibuat: {{ $hasil_sinkronisasi['dibuat'] }} ·
+                                        Diubah: {{ $hasil_sinkronisasi['diubah'] }} ·
+                                        Dipulihkan: {{ $hasil_sinkronisasi['dipulihkan'] }} ·
+                                        Tetap: {{ $hasil_sinkronisasi['tetap'] }} ·
+                                        Dilewati: {{ $hasil_sinkronisasi['dilewati'] }}
+                                    </div>
+                                    <div class="small mt-1">
+                                        Foto disimpan: {{ $hasil_sinkronisasi['foto_disimpan'] }} ·
+                                        Tidak tersedia: {{ $hasil_sinkronisasi['foto_tidak_tersedia'] }} ·
+                                        Manual dipertahankan: {{ $hasil_sinkronisasi['foto_dipertahankan'] }} ·
+                                        Gagal: {{ $hasil_sinkronisasi['foto_gagal'] }}
+                                    </div>
+                                    @if ($hasil_sinkronisasi['rincian'])
+                                        <details class="small mt-2">
+                                            <summary>Rincian data dilewati (maksimum 20)</summary>
+                                            <ul class="mb-0 mt-1">
+                                                @foreach ($hasil_sinkronisasi['rincian'] as $rincian)
+                                                    <li>{{ $rincian }}</li>
+                                                @endforeach
+                                            </ul>
+                                        </details>
+                                    @endif
+                                @endif
+                            </div>
+                        @endif
+                    </div>
+                </div>
+            </div>
+        </div>
+    @endif
 
     <div class="row">
         <div class="col-12">

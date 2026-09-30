@@ -11,11 +11,22 @@ class Mahasiswa extends Model
 {
     use SoftDeletes;
 
+    public const STATUS_SYNC_PENDING = 'pending';
+
+    public const STATUS_SYNC_SYNCED = 'synced';
+
     protected $table = 'mahasiswa';
 
     protected $primaryKey = 'id_mahasiswa';
 
     protected $guarded = ['id_mahasiswa'];
+
+    protected function casts(): array
+    {
+        return [
+            'synced_at' => 'datetime',
+        ];
+    }
 
     public function user(): BelongsTo
     {

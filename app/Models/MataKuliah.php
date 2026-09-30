@@ -11,9 +11,20 @@ class MataKuliah extends Model
 {
     use SoftDeletes;
 
+    public const STATUS_SYNC_PENDING = 'pending';
+
+    public const STATUS_SYNC_SYNCED = 'synced';
+
     protected $table = 'mata_kuliah';
 
     protected $guarded = ['id'];
+
+    protected function casts(): array
+    {
+        return [
+            'synced_at' => 'datetime',
+        ];
+    }
 
     public function prodi(): BelongsTo
     {

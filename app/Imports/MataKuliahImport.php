@@ -59,6 +59,7 @@ class MataKuliahImport implements SkipsEmptyRows, ToCollection, WithHeadingRow
                         'sks' => (float) $sks,
                         'deskripsi' => $this->nullableString($row['deskripsi'] ?? null),
                         'status' => $status,
+                        'status_sync' => MataKuliah::STATUS_SYNC_PENDING,
                     ],
                 );
             }

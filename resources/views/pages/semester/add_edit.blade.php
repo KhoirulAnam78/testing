@@ -30,6 +30,8 @@ new #[Layout('layouts.app')] class extends Component
 
     public function mount($id): void
     {
+        abort_unless(auth()->user()?->can($id === 'add' ? 'semester:tambah' : 'semester:edit'), 403);
+
         if ($id && $id !== 'add') {
             try {
                 $this->edit_id = Crypt::decrypt($id);
@@ -90,6 +92,8 @@ new #[Layout('layouts.app')] class extends Component
 
     public function save()
     {
+        abort_unless(auth()->user()?->can($this->edit_id ? 'semester:edit' : 'semester:tambah'), 403);
+
         $this->tanggal_mulai = $this->normalizeDateInput($this->tanggal_mulai);
         $this->tanggal_selesai = $this->normalizeDateInput($this->tanggal_selesai);
 

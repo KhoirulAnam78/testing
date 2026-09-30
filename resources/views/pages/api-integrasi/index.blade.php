@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\ApiIntegrasi;
+use App\Support\Akademik\AkademikClient;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
 
@@ -22,6 +23,12 @@ new #[Layout('layouts.app')] class extends Component
 
     public bool $sudah_tersimpan = false;
 
+    public ?array $status_token = null;
+
+    public ?string $hasil_tes = null;
+
+    public bool $tes_berhasil = false;
+
     public function mount(): void
     {
         $this->pastikanBerhak();
@@ -39,6 +46,7 @@ new #[Layout('layouts.app')] class extends Component
         $this->is_aktif = $integrasi->is_aktif;
         $this->timeout = $integrasi->timeout;
         $this->sudah_tersimpan = true;
+        $this->status_token = app(AkademikClient::class)->cachedTokenStatus();
     }
 
     public function save(): void
@@ -52,8 +60,8 @@ new #[Layout('layouts.app')] class extends Component
 
         $validated = $this->validate([
             'nama' => ['required', 'string', 'max:255'],
-            'base_url' => ['required', 'url:http,https', 'max:2048'],
-            'login_url' => ['required', 'url:http,https', 'max:2048'],
+            'base_url' => ['required', 'url:https', 'max:2048'],
+            'login_url' => ['required', 'url:https', 'max:2048'],
             'username' => ['required', 'string', 'max:255'],
             'password' => [$this->sudah_tersimpan ? 'nullable' : 'required', 'string', 'max:4096'],
             'is_aktif' => ['boolean'],
@@ -61,9 +69,9 @@ new #[Layout('layouts.app')] class extends Component
         ], [
             'nama.required' => 'Nama integrasi wajib diisi.',
             'base_url.required' => 'Base URL wajib diisi.',
-            'base_url.url' => 'Base URL harus berupa URL HTTP atau HTTPS yang valid.',
+            'base_url.url' => 'Base URL harus berupa URL HTTPS yang valid.',
             'login_url.required' => 'URL login wajib diisi.',
-            'login_url.url' => 'URL login harus berupa URL HTTP atau HTTPS yang valid.',
+            'login_url.url' => 'URL login harus berupa URL HTTPS yang valid.',
             'username.required' => 'Username wajib diisi.',
             'password.required' => 'Password wajib diisi saat konfigurasi pertama.',
             'timeout.required' => 'Timeout wajib diisi.',
@@ -80,9 +88,40 @@ new #[Layout('layouts.app')] class extends Component
         $integrasi->id = 1;
         $integrasi->fill($validated)->save();
 
+        app(AkademikClient::class)->forgetToken();
+
         $this->reset('password');
         $this->sudah_tersimpan = true;
+        $this->status_token = null;
+        $this->hasil_tes = null;
         session()->flash('success', 'Pengaturan API integrasi berhasil disimpan.');
+    }
+
+    public function tesLogin(): void
+    {
+        $this->pastikanBerhak();
+        $this->hasil_tes = null;
+        $this->tes_berhasil = false;
+
+        $integrasi = ApiIntegrasi::query()->find(1);
+
+        if (! $integrasi) {
+            $this->hasil_tes = 'Simpan konfigurasi API sebelum tes login.';
+
+            return;
+        }
+
+        try {
+            $this->status_token = app(AkademikClient::class)->login($integrasi);
+            $this->tes_berhasil = true;
+            $this->hasil_tes = 'Login API berhasil. Token tersimpan sementara di cache.';
+        } catch (DomainException $exception) {
+            $this->status_token = null;
+            $this->hasil_tes = $exception->getMessage();
+        } catch (Throwable) {
+            $this->status_token = null;
+            $this->hasil_tes = 'Tes login gagal karena terjadi kesalahan internal.';
+        }
     }
 
     private function pastikanBerhak(): void
@@ -114,15 +153,31 @@ new #[Layout('layouts.app')] class extends Component
                 <div class="card">
                     <div class="card-header">
                         <h5 class="card-title mb-1">Akun API Akademik</h5>
-                        <p class="text-muted mb-0">Simpan alamat API dan akun integrasi. Tes koneksi tersedia setelah format login API diketahui.</p>
+                        <p class="text-muted mb-0">Simpan alamat API dan akun integrasi, lalu tes login untuk memperoleh token.</p>
                     </div>
                     <div class="card-body">
                         @if (session('success'))
                             <div class="alert alert-success" role="alert">{{ session('success') }}</div>
                         @endif
 
+                        @if ($hasil_tes)
+                            <div class="alert {{ $tes_berhasil ? 'alert-success' : 'alert-danger' }}" role="alert">
+                                {{ $hasil_tes }}
+                            </div>
+                        @endif
+
+                        @if ($status_token)
+                            <div class="alert alert-success" role="status">
+                                <div class="fw-semibold mb-1">Token tersedia di cache</div>
+                                <div>Token: <code>{{ $status_token['masked_token'] }}</code></div>
+                                <div>Tipe: {{ $status_token['token_type'] }}</div>
+                                <div>Kedaluwarsa: {{ $status_token['expires_at'] }}</div>
+                                <div>Cache aktif sampai: {{ $status_token['cached_until'] }} ({{ max(1, (int) ceil($status_token['ttl_seconds'] / 60)) }} menit)</div>
+                            </div>
+                        @endif
+
                         <div class="alert alert-info" role="alert">
-                            Password dienkripsi memakai <code>APP_KEY</code> dan tidak ditampilkan kembali. Pastikan cadangan <code>APP_KEY</code> tersimpan aman.
+                            Password dienkripsi memakai <code>APP_KEY</code> jika <code>APP_KEY</code> berubah maka inputkan ulang password.
                         </div>
 
                         <div class="mb-3">
@@ -186,7 +241,7 @@ new #[Layout('layouts.app')] class extends Component
                                     <input class="form-check-input" type="checkbox" role="switch" id="is_aktif" wire:model="is_aktif">
                                     <label class="form-check-label" for="is_aktif">Integrasi aktif</label>
                                 </div>
-                                <div class="form-text">Status ini belum menjalankan sinkronisasi sampai client API dibuat.</div>
+                                <div class="form-text">Status aktif diperlukan untuk tes login dan request API.</div>
                             </div>
                         </div>
                     </div>
@@ -194,9 +249,15 @@ new #[Layout('layouts.app')] class extends Component
             </div>
         </div>
 
-        <div style="position: fixed; bottom: 50px; left: 0; width: 100%; display: flex; justify-content: center; z-index: 1050;">
+        <div style="position: fixed; bottom: 50px; left: 0; width: 100%; display: flex; justify-content: center; gap: 0.5rem; z-index: 1050;">
+            <button type="button" class="btn btn-info shadow d-flex align-items-center gap-2"
+                wire:click="tesLogin" wire:loading.attr="disabled" wire:target="save,tesLogin"
+                @disabled(! $sudah_tersimpan)>
+                <span wire:loading.remove wire:target="tesLogin"><i class="ri-key-2-line"></i> TES & AMBIL TOKEN</span>
+                <span wire:loading wire:target="tesLogin">Menghubungkan...</span>
+            </button>
             <button type="submit" class="btn btn-primary shadow d-flex align-items-center gap-2 fab-save"
-                wire:loading.attr="disabled" wire:target="save">
+                wire:loading.attr="disabled" wire:target="save,tesLogin">
                 <span wire:loading.remove wire:target="save"><i class="ri-save-line"></i> SIMPAN</span>
                 <span wire:loading wire:target="save">Menyimpan...</span>
             </button>

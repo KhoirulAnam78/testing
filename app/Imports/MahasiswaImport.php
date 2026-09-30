@@ -99,6 +99,7 @@ class MahasiswaImport implements SkipsEmptyRows, ToCollection, WithHeadingRow
                     'no_hp' => $this->nullableString($row['no_hp'] ?? null),
                     'angkatan' => (int) $angkatan,
                     'status' => $status,
+                    'status_sync' => Mahasiswa::STATUS_SYNC_PENDING,
                 ];
 
                 if ($mahasiswa && (int) $mahasiswa->prodi_id !== (int) $prodiId) {

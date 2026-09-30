@@ -55,8 +55,10 @@ final class TableSemester extends PowerGridComponent
             ->add('nama', fn ($row) => ucfirst($row->nama))
             ->add('tahun')
             ->add('kode')
-            ->add('tanggal_mulai', fn ($row) => $row->tanggal_mulai?->format('d/m/Y') ?: '-')
-            ->add('tanggal_selesai', fn ($row) => $row->tanggal_selesai?->format('d/m/Y') ?: '-')
+            ->add('tanggal_mulai_label', fn ($row) => $row->tanggal_mulai?->format('d/m/Y') ?: '-')
+            ->add('tanggal_selesai_label', fn ($row) => $row->tanggal_selesai?->format('d/m/Y') ?: '-')
+            ->add('kontrak_mulai_label', fn ($row) => $row->kontrak_mulai?->format('d/m/Y H:i') ?: '-')
+            ->add('kontrak_selesai_label', fn ($row) => $row->kontrak_selesai?->format('d/m/Y H:i') ?: '-')
             ->add('status_label', fn ($row) => $row->is_aktif
                 ? '<span class="badge bg-success">Aktif</span>'
                 : '<span class="badge bg-secondary">Tidak Aktif</span>')
@@ -81,8 +83,10 @@ final class TableSemester extends PowerGridComponent
             Column::make('Nama', 'nama')->searchable()->sortable(),
             Column::make('Tahun', 'tahun')->searchable()->sortable(),
             Column::make('Kode', 'kode')->searchable()->sortable(),
-            Column::make('Mulai', 'tanggal_mulai'),
-            Column::make('Selesai', 'tanggal_selesai'),
+            Column::make('Mulai', 'tanggal_mulai_label'),
+            Column::make('Selesai', 'tanggal_selesai_label'),
+            Column::make('Mulai KRS', 'kontrak_mulai_label'),
+            Column::make('Selesai KRS', 'kontrak_selesai_label'),
             Column::make('Status', 'status_label', 'is_aktif')->sortable(),
             Column::action('Aksi'),
         ];
@@ -106,6 +110,8 @@ final class TableSemester extends PowerGridComponent
 
     public function confirmDeleteSemester(string $id): void
     {
+        abort_unless(auth()->user()?->can('semester:hapus'), 403);
+
         $this->dispatch('siakad-confirm',
             id: $id,
             confirmEvent: 'delete-semester-confirmed',
@@ -117,11 +123,13 @@ final class TableSemester extends PowerGridComponent
     }
 
     #[On('delete-semester-confirmed')]
-    public function deleteSemester($id): void
+    public function deleteSemester(string $id): void
     {
+        abort_unless(auth()->user()?->can('semester:hapus'), 403);
+
         try {
             $decrypted = Crypt::decrypt($id);
-        } catch (DecryptException $e) {
+        } catch (DecryptException) {
             abort(404);
         }
 
@@ -141,12 +149,17 @@ final class TableSemester extends PowerGridComponent
                 ->class('btn btn-info btn-sm mb-2')
                 ->route('semester.add_edit', ['id' => Crypt::encrypt($row->id_semester)])
                 ->tooltip('Edit Semester')
-                ->attributes(['wire:navigate' => true]),
+                ->attributes(['wire:navigate' => true])
+                ->can(auth()->user()?->can('semester:edit') ?? false),
             Button::add('delete-semester')
                 ->slot('<i class="ri-delete-bin-line"></i> Hapus')
                 ->class('btn btn-danger btn-sm mb-2')
                 ->tooltip('Hapus Semester')
-                ->attributes(['wire:click' => "confirmDeleteSemester('".Crypt::encrypt($row->id_semester)."')"]),
+                ->attributes(['wire:click' => "confirmDeleteSemester('".Crypt::encrypt($row->id_semester)."')"])
+                ->can(auth()->user()?->can('semester:hapus') ?? false),
         ];
     }
+
+    #[On('semester-disinkronkan')]
+    public function refreshTable(): void {}
 }
