@@ -22,6 +22,12 @@ new class extends Component
 
     public array $kandidat_ids = [];
 
+    public array $peserta_ids = [];
+
+    public int $kandidat_per_page = 10;
+
+    public int $peserta_per_page = 10;
+
     public ?string $kandidat_kelas_id = null;
 
     public function mount($blok_id): void
@@ -41,6 +47,21 @@ new class extends Component
     public function updatedKandidatSearch(): void
     {
         $this->resetPage('kandidatPage');
+    }
+
+    public function updatedKandidatPerPage(): void
+    {
+        $this->resetPage('kandidatPage');
+    }
+
+    public function updatedPesertaPerPage(): void
+    {
+        $this->resetPage('pesertaPage');
+    }
+
+    private function perPage(int $perPage): int
+    {
+        return in_array($perPage, [10, 25, 50, 100], true) ? $perPage : 10;
     }
 
     /**
@@ -99,7 +120,7 @@ new class extends Component
     public function togglePageKandidat(): void
     {
         $ids = $this->kandidatQuery($this->blok())
-            ->paginate(10, pageName: 'kandidatPage')
+            ->paginate($this->perPage($this->kandidat_per_page), pageName: 'kandidatPage')
             ->pluck('id_mahasiswa')
             ->map(fn ($id) => (string) $id)
             ->all();
@@ -253,12 +274,10 @@ new class extends Component
 
     public function deletePeserta(string $id): void
     {
-        $peserta = PesertaBlok::where('blok_id', $this->blok_id)->findOrFail($id);
+        PesertaBlok::where('blok_id', $this->blok_id)->findOrFail($id);
 
-        DB::transaction(function () use ($peserta) {
-            AnggotaKelompokBlok::where('peserta_blok_id', $peserta->id_peserta_blok)->delete();
-            $peserta->delete();
-        });
+        $this->hapusPeserta([(int) $id]);
+        $this->peserta_ids = array_values(array_diff(array_map('strval', $this->peserta_ids), [(string) $id]));
 
         $this->dispatch('notify', message: [
             'status' => 'success',
@@ -266,13 +285,74 @@ new class extends Component
         ]);
     }
 
+    public function togglePagePeserta(): void
+    {
+        $ids = $this->pesertaQuery()
+            ->paginate($this->perPage($this->peserta_per_page), pageName: 'pesertaPage')
+            ->pluck('id_peserta_blok')
+            ->map(fn ($id) => (string) $id)
+            ->all();
+
+        if ($ids === []) {
+            return;
+        }
+
+        $selected = array_map('strval', $this->peserta_ids);
+
+        $this->peserta_ids = empty(array_diff($ids, $selected))
+            ? array_values(array_diff($selected, $ids))
+            : array_values(array_unique([...$selected, ...$ids]));
+    }
+
+    public function deletePesertaTerpilih(): void
+    {
+        $this->validate([
+            'peserta_ids' => ['required', 'array', 'min:1'],
+            'peserta_ids.*' => ['integer'],
+        ], [
+            'peserta_ids.required' => 'Pilih minimal satu peserta.',
+        ]);
+
+        $ids = collect($this->peserta_ids)->map(fn ($id) => (int) $id)->unique()->values();
+        $validIds = PesertaBlok::where('blok_id', $this->blok_id)
+            ->whereIn('id_peserta_blok', $ids)
+            ->pluck('id_peserta_blok');
+
+        if ($validIds->count() !== $ids->count()) {
+            $this->addError('peserta_ids', 'Pilihan peserta tidak valid untuk blok ini.');
+
+            return;
+        }
+
+        $this->hapusPeserta($validIds->all());
+        $jumlah = $validIds->count();
+        $this->peserta_ids = [];
+        $this->resetPage('pesertaPage');
+
+        $this->dispatch('notify', message: [
+            'status' => 'success',
+            'message' => $jumlah.' peserta dikeluarkan dari blok.',
+        ]);
+    }
+
+    private function hapusPeserta(array $ids): void
+    {
+        DB::transaction(function () use ($ids) {
+            AnggotaKelompokBlok::whereIn('peserta_blok_id', $ids)->delete();
+
+            PesertaBlok::where('blok_id', $this->blok_id)
+                ->whereIn('id_peserta_blok', $ids)
+                ->delete();
+        });
+    }
+
     public function render()
     {
         $blok = $this->blok();
 
         return $this->view([
-            'peserta' => $this->pesertaQuery()->paginate(10, pageName: 'pesertaPage'),
-            'kandidat' => $this->kandidatQuery($blok)->paginate(10, pageName: 'kandidatPage'),
+            'peserta' => $this->pesertaQuery()->paginate($this->perPage($this->peserta_per_page), pageName: 'pesertaPage'),
+            'kandidat' => $this->kandidatQuery($blok)->paginate($this->perPage($this->kandidat_per_page), pageName: 'kandidatPage'),
             'rombelOptions' => Kelas::where('blok_id', $this->blok_id)
                 ->orderBy('kode')
                 ->get(['id_kelas', 'kode', 'nama']),
@@ -298,6 +378,11 @@ new class extends Component
                     <div class="input-group">
                         <span class="input-group-text"><i class="ri-search-line"></i></span>
                         <input type="text" class="form-control" placeholder="Nama atau NIM" wire:model.live.debounce.400ms="kandidat_search">
+                        <select class="form-select flex-grow-0 w-auto" wire:model.live="kandidat_per_page" aria-label="Jumlah calon peserta per halaman">
+                            @foreach ([10, 25, 50, 100] as $jumlah)
+                                <option value="{{ $jumlah }}">{{ $jumlah }} tampil</option>
+                            @endforeach
+                        </select>
                     </div>
                     <div class="form-text">Hanya mahasiswa aktif pada program studi blok yang belum menjadi peserta.</div>
                 </div>
@@ -355,18 +440,41 @@ new class extends Component
         <div class="card">
             <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
                 <h5 class="mb-0">Daftar Peserta Blok</h5>
-                <span class="badge bg-info-subtle text-info">{{ $peserta->total() }} peserta</span>
+                <div class="d-flex flex-wrap align-items-center gap-2">
+                    <span class="badge bg-info-subtle text-info">{{ $peserta->total() }} peserta</span>
+                    <span class="badge bg-primary-subtle text-primary">{{ count($peserta_ids) }} dipilih</span>
+                    <button type="button" class="btn btn-danger btn-sm"
+                        wire:click="deletePesertaTerpilih"
+                        wire:confirm="Keluarkan semua peserta terpilih dari blok? Keanggotaan kelompok mereka juga akan dihapus."
+                        @disabled(count($peserta_ids) === 0)>
+                        <i class="ri-delete-bin-line"></i> Hapus Terpilih
+                    </button>
+                </div>
             </div>
             <div class="card-body">
+                @error('peserta_ids') <div class="alert alert-danger py-2 alert-dismissible fade show" role="alert"><button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Tutup"></button>{{ $message }}</div> @enderror
                 <div class="input-group mb-3">
                     <span class="input-group-text"><i class="ri-search-line"></i></span>
                     <input type="text" class="form-control" placeholder="Cari nama atau NIM peserta" wire:model.live.debounce.400ms="peserta_search">
+                    <select class="form-select flex-grow-0 w-auto" wire:model.live="peserta_per_page" aria-label="Jumlah peserta per halaman">
+                        @foreach ([10, 25, 50, 100] as $jumlah)
+                            <option value="{{ $jumlah }}">{{ $jumlah }} tampil</option>
+                        @endforeach
+                    </select>
                 </div>
+
+                @php($pesertaPageIds = $peserta->pluck('id_peserta_blok')->map(fn ($id) => (string) $id)->all())
+                @php($pesertaPageAllSelected = $pesertaPageIds !== [] && empty(array_diff($pesertaPageIds, array_map('strval', $peserta_ids))))
 
                 <div class="table-responsive">
                     <table class="table table-nowrap align-middle">
                         <thead>
                             <tr>
+                                <th style="width: 1%">
+                                    <input class="form-check-input" type="checkbox" aria-label="Pilih semua peserta di halaman ini"
+                                        wire:click="togglePagePeserta"
+                                        @checked($pesertaPageAllSelected) @disabled($pesertaPageIds === [])>
+                                </th>
                                 <th>Mahasiswa</th>
                                 <th>Status Kontrak</th>
                                 @if ($rombelOptions->isNotEmpty())
@@ -379,6 +487,10 @@ new class extends Component
                         <tbody>
                             @forelse ($peserta as $item)
                                 <tr wire:key="peserta-{{ $item->id_peserta_blok }}">
+                                    <td>
+                                        <input class="form-check-input" type="checkbox" value="{{ $item->id_peserta_blok }}"
+                                            wire:model.live="peserta_ids" aria-label="Pilih {{ $item->mahasiswa?->nama }}">
+                                    </td>
                                     <td>
                                         <span class="fw-semibold">{{ $item->mahasiswa?->nama }}</span>
                                         <span class="text-muted d-block small">{{ $item->mahasiswa?->nim }}</span>
@@ -415,7 +527,7 @@ new class extends Component
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="{{ $rombelOptions->isNotEmpty() ? 5 : 4 }}" class="text-muted">
+                                    <td colspan="{{ $rombelOptions->isNotEmpty() ? 6 : 5 }}" class="text-muted">
                                         {{ $peserta_search ? 'Peserta tidak ditemukan.' : 'Belum ada peserta pada blok ini.' }}
                                     </td>
                                 </tr>

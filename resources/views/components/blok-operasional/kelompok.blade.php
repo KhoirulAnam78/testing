@@ -16,21 +16,33 @@ new class extends Component
     use WithPagination;
 
     public int $blok_id;
+
     public $aturan_kegiatan_blok_id;
 
     public $edit_id;
+
     public string $kode = '';
+
     public string $nama = '';
+
     public $kapasitas;
+
     public ?string $kelas_id = null;
+
     public string $status = 'aktif';
+
     public array $anggota_ids = [];
+
     public string $anggota_search = '';
+
+    public int $anggota_per_page = 10;
 
     // Sengaja tanpa tipe int: input number yang dikosongkan mengirim string kosong,
     // biarkan validasi yang menolaknya alih-alih memicu TypeError saat assignment.
     public $gen_jumlah = 2;
+
     public string $gen_prefix = '';
+
     public ?string $gen_kelas_id = null;
 
     public function mount($blok_id): void
@@ -61,6 +73,16 @@ new class extends Component
     public function updatedAnggotaSearch(): void
     {
         $this->resetPage('anggotaPage');
+    }
+
+    public function updatedAnggotaPerPage(): void
+    {
+        $this->resetPage('anggotaPage');
+    }
+
+    private function perPage(): int
+    {
+        return in_array($this->anggota_per_page, [10, 25, 50, 100], true) ? $this->anggota_per_page : 10;
     }
 
     /**
@@ -113,29 +135,6 @@ new class extends Component
         return AturanKegiatanBlok::where('blok_id', $this->blok_id)->findOrFail($this->aturan_kegiatan_blok_id);
     }
 
-    /**
-     * Peserta yang sudah masuk kelompok lain pada kegiatan yang sama.
-     * Satu query, hasilnya sebatas jumlah peserta blok.
-     *
-     * @return array<int, int>
-     */
-    public function pesertaTerpakaiIds(): array
-    {
-        if (! $this->aturan_kegiatan_blok_id) {
-            return [];
-        }
-
-        return AnggotaKelompokBlok::query()
-            ->whereHas('kelompok_blok', function ($query) {
-                $query->where('blok_id', $this->blok_id)
-                    ->where('aturan_kegiatan_blok_id', $this->aturan_kegiatan_blok_id)
-                    ->when($this->edit_id, fn ($inner) => $inner->where('id_kelompok_blok', '!=', $this->edit_id));
-            })
-            ->pluck('peserta_blok_id')
-            ->map(fn ($id) => (int) $id)
-            ->all();
-    }
-
     private function anggotaQuery()
     {
         return PesertaBlok::query()
@@ -143,6 +142,11 @@ new class extends Component
             ->join('mahasiswa', 'mahasiswa.id_mahasiswa', '=', 'peserta_blok.mahasiswa_id')
             ->where('peserta_blok.blok_id', $this->blok_id)
             ->where('peserta_blok.status', 'aktif')
+            ->whereDoesntHave('anggota_kelompok_blok.kelompok_blok', function ($query) {
+                $query->where('blok_id', $this->blok_id)
+                    ->where('aturan_kegiatan_blok_id', $this->aturan_kegiatan_blok_id)
+                    ->when($this->edit_id, fn ($inner) => $inner->where('id_kelompok_blok', '!=', $this->edit_id));
+            })
             ->when($this->kelas_id, fn ($query) => $query->where('peserta_blok.kelas_id', $this->kelas_id))
             ->when($this->anggota_search !== '', function ($query) {
                 $search = '%'.$this->anggota_search.'%';
@@ -157,11 +161,8 @@ new class extends Component
 
     public function togglePageAnggota(): void
     {
-        $terpakai = $this->pesertaTerpakaiIds();
-
         $ids = $this->anggotaQuery()
-            ->paginate(10, pageName: 'anggotaPage')
-            ->reject(fn ($peserta) => in_array((int) $peserta->id_peserta_blok, $terpakai, true))
+            ->paginate($this->perPage(), pageName: 'anggotaPage')
             ->pluck('id_peserta_blok')
             ->map(fn ($id) => (string) $id)
             ->all();
@@ -445,8 +446,7 @@ new class extends Component
         return $this->view([
             'aturanList' => $aturanList,
             'aturanAktif' => $aturanList->firstWhere('id', (int) $this->aturan_kegiatan_blok_id),
-            'anggotaPage' => $this->anggotaQuery()->paginate(10, pageName: 'anggotaPage'),
-            'pesertaTerpakai' => $this->pesertaTerpakaiIds(),
+            'anggotaPage' => $this->anggotaQuery()->paginate($this->perPage(), pageName: 'anggotaPage'),
             'kelompokList' => $this->aturan_kegiatan_blok_id
                 ? KelompokBlok::query()
                     ->where('blok_id', $this->blok_id)
@@ -605,27 +605,32 @@ new class extends Component
                             <div class="input-group mb-2">
                                 <span class="input-group-text"><i class="ri-search-line"></i></span>
                                 <input type="text" class="form-control" placeholder="Cari nama atau NIM" wire:model.live.debounce.400ms="anggota_search">
+                                <select class="form-select flex-grow-0 w-auto" wire:model.live="anggota_per_page" aria-label="Jumlah calon anggota per halaman">
+                                    @foreach ([10, 25, 50, 100] as $jumlah)
+                                        <option value="{{ $jumlah }}">{{ $jumlah }} tampil</option>
+                                    @endforeach
+                                </select>
                             </div>
+
+                            @php($anggotaPageIds = $anggotaPage->pluck('id_peserta_blok')->map(fn ($id) => (string) $id)->all())
+                            @php($anggotaPageAllSelected = $anggotaPageIds !== [] && empty(array_diff($anggotaPageIds, array_map('strval', $anggota_ids))))
 
                             <div class="border rounded">
                                 <div class="form-check border-bottom p-3 ps-5 mb-0">
-                                    <input class="form-check-input" type="checkbox" id="anggota-page-all" wire:click="togglePageAnggota">
+                                    <input class="form-check-input" type="checkbox" id="anggota-page-all" wire:click="togglePageAnggota"
+                                        @checked($anggotaPageAllSelected) @disabled($anggotaPageIds === [])>
                                     <label class="form-check-label fw-semibold" for="anggota-page-all">Pilih semua di halaman ini</label>
                                 </div>
                                 @forelse ($anggotaPage as $peserta)
-                                    @php($terpakai = in_array((int) $peserta->id_peserta_blok, $pesertaTerpakai, true))
                                     <div class="form-check border-bottom p-3 ps-5 mb-0"
                                         wire:key="anggota-{{ $edit_id ?: 'baru' }}-{{ $peserta->id_peserta_blok }}">
-                                        <input class="form-check-input" type="checkbox" value="{{ $peserta->id_peserta_blok }}" wire:model="anggota_ids" id="anggota-{{ $peserta->id_peserta_blok }}" @disabled($terpakai)>
+                                        <input class="form-check-input" type="checkbox" value="{{ $peserta->id_peserta_blok }}" wire:model.live="anggota_ids" id="anggota-{{ $peserta->id_peserta_blok }}">
                                         <label class="form-check-label w-100" for="anggota-{{ $peserta->id_peserta_blok }}">
                                             <span class="fw-semibold">{{ $peserta->mahasiswa?->nama }}</span>
                                             <span class="text-muted d-block small">
                                                 {{ $peserta->mahasiswa?->nim }}
                                                 @if ($peserta->kelas)
                                                     &middot; {{ $peserta->kelas->kode }}
-                                                @endif
-                                                @if ($terpakai)
-                                                    &middot; sudah masuk kelompok lain pada kegiatan ini
                                                 @endif
                                             </span>
                                         </label>
