@@ -16,11 +16,35 @@ use App\Models\PresensiPertemuanBlok;
 use App\Support\AksesPertemuanBlok;
 use Dompdf\Dompdf;
 use Dompdf\Options;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 Route::view('/', 'welcome')->name('welcome');
+
+Route::get('/sso/logout', function (Request $request) {
+    $redirect = $request->query('redirect', config('services.sso.allowed_logout_redirects.0'));
+
+    abort_unless(
+        is_string($redirect)
+            && in_array($redirect, config('services.sso.allowed_logout_redirects', []), true),
+        400,
+        'Redirect SSO tidak diizinkan.'
+    );
+
+    Auth::user()?->tokens()->with('refreshToken')->get()->each(function ($token): void {
+        $token->revoke();
+        $token->refreshToken?->revoke();
+    });
+
+    Auth::guard('web')->logout();
+    $request->session()->invalidate();
+    $request->session()->regenerateToken();
+
+    return redirect()->away($redirect);
+})->name('sso.logout');
 
 Route::middleware(['auth', 'route.permission'])->group(function () {
     Route::livewire('dashboard', 'pages::dashboard.index')

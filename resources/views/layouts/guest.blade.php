@@ -5,10 +5,10 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <meta content="{{ config('app.tagline') }} untuk pembelajaran blok Fakultas Kedokteran UIN Sulthan Thaha Saifuddin Jambi" name="description" />
+    <meta content="Layanan Single Sign-On PLASMA dan CBT Fakultas Kedokteran UIN Sulthan Thaha Saifuddin Jambi" name="description" />
     <meta content="noindex, nofollow" name="robots" />
 
-    <title>{{ config('app.name') }} — {{ config('app.tagline') }}</title>
+    <title>SSO PLASMA &amp; CBT — FK UIN Jambi</title>
 
     <link data-navigate-once rel="shortcut icon" href="{{ asset('assets/images/favicon/favicon-uinjambi.svg') }}">
 
@@ -496,8 +496,8 @@
             <a class="mark" href="{{ url('/') }}">
                 <img src="{{ asset('assets/images/favicon/favicon-uinjambi.svg') }}" alt="">
                 <span>
-                    <strong>{{ config('app.name') }}</strong>
-                    <span>{{ config('app.tagline') }}</span>
+                    <strong>SSO PLASMA &amp; CBT</strong>
+                    <span>Fakultas Kedokteran UIN Jambi</span>
                 </span>
             </a>
 
@@ -512,7 +512,7 @@
     </main>
 
     <footer class="auth__foot">
-        {{ date('Y') }} &copy; Fakultas Kedokteran UIN Jambi
+        {{ date('Y') }} &copy; SSO PLASMA &amp; CBT &middot; FK UIN Jambi
     </footer>
 
     <script>

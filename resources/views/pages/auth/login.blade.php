@@ -27,13 +27,13 @@ new #[Layout('layouts.guest')] class extends Component
     <div class="sheet-wrap">
         <div class="sheet">
             <div class="sheet__band">
-                <span><b>Masuk</b></span>
-                <span>Akses internal</span>
+                <span><b>FK UIN Jambi</b></span>
+                <span>SSO PLASMA &amp; CBT</span>
             </div>
 
             <div class="sheet__body">
-                <h1 class="sheet__title">Masuk ke akun Anda</h1>
-                <p class="sheet__note">Gunakan akun yang diberikan pengelola akademik Fakultas Kedokteran.</p>
+                <h1 class="sheet__title">Masuk dengan akun SSO</h1>
+                <p class="sheet__note">Gunakan akun untuk mengakses PLASMA dan CBT.</p>
 
                 <form class="sheet__form" wire:submit="login">
                     <div class="mb-3">
@@ -84,7 +84,7 @@ new #[Layout('layouts.guest')] class extends Component
 
                     <button class="btn btn-primary btn-lg w-100" type="submit" wire:loading.attr="disabled">
                         <span wire:loading.remove wire:target="login">
-                            <i class="ri-login-box-line align-bottom me-1"></i> Masuk
+                            <i class="ri-login-box-line align-bottom me-1"></i> Masuk dengan SSO
                         </span>
                         <span wire:loading wire:target="login">
                             <span class="spinner-border spinner-border-sm me-1" role="status"
@@ -97,7 +97,7 @@ new #[Layout('layouts.guest')] class extends Component
         </div>
 
         <p class="sheet__foot">
-            Pendaftaran akun tidak dibuka. Hubungi pengelola akademik untuk mendapatkan akses.
+            Tidak dapat mengakses akun? Hubungi pengelola akademik Fakultas Kedokteran.
         </p>
     </div>
 </div>

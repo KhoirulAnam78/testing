@@ -35,4 +35,11 @@ return [
         ],
     ],
 
+    'sso' => [
+        'allowed_logout_redirects' => array_values(array_filter(array_map(
+            'trim',
+            explode(',', (string) env('SSO_ALLOWED_LOGOUT_REDIRECTS', ''))
+        ))),
+    ],
+
 ];

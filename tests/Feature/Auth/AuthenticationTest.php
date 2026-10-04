@@ -17,7 +17,7 @@ class AuthenticationTest extends TestCase
 
         $response
             ->assertOk()
-            ->assertSee('Masuk ke akun Anda');
+            ->assertSee('Masuk dengan akun SSO');
     }
 
     public function test_users_can_authenticate_using_the_login_screen(): void
