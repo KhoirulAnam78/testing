@@ -34,6 +34,48 @@
         </div>
     </div>
 
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+        <div class="text-muted small">
+            Sinkronisasi memeriksa seluruh mahasiswa lokal dan hanya memperbarui assignment kurikulum berdasarkan data API.
+        </div>
+        <button
+            type="button"
+            class="btn btn-primary"
+            wire:click="sinkronkan"
+            wire:confirm="Periksa dan sesuaikan kurikulum seluruh mahasiswa lokal berdasarkan data API?"
+            wire:loading.attr="disabled"
+            wire:target="sinkronkan"
+        >
+            <span wire:loading.remove wire:target="sinkronkan"><i class="ri-refresh-line"></i> Sinkronkan Kurikulum</span>
+            <span wire:loading wire:target="sinkronkan"><span class="spinner-border spinner-border-sm" aria-hidden="true"></span> Menyinkronkan...</span>
+        </button>
+    </div>
+
+    @if ($hasil_sinkronisasi)
+        <div class="alert {{ $hasil_sinkronisasi['status'] === 'success' ? 'alert-success' : 'alert-danger' }}">
+            <div class="fw-semibold">Sinkronisasi Kurikulum Mahasiswa · {{ $hasil_sinkronisasi['selesai_pada'] }}</div>
+            <div class="small mt-1">{{ $hasil_sinkronisasi['pesan'] }}</div>
+            @if ($hasil_sinkronisasi['status'] === 'success')
+                <div class="d-flex flex-wrap gap-3 small mt-2">
+                    <span>Diperiksa: <strong>{{ $hasil_sinkronisasi['diperiksa'] }}</strong></span>
+                    <span>Diubah: <strong>{{ $hasil_sinkronisasi['diubah'] }}</strong></span>
+                    <span>Sudah sesuai: <strong>{{ $hasil_sinkronisasi['tetap'] }}</strong></span>
+                    <span>Dilewati: <strong>{{ $hasil_sinkronisasi['dilewati'] }}</strong></span>
+                </div>
+                @if ($hasil_sinkronisasi['rincian'])
+                    <details class="small mt-2">
+                        <summary>Rincian mahasiswa yang dilewati</summary>
+                        <ul class="mb-0 mt-1">
+                            @foreach ($hasil_sinkronisasi['rincian'] as $rincian)
+                                <li>{{ $rincian }}</li>
+                            @endforeach
+                        </ul>
+                    </details>
+                @endif
+            @endif
+        </div>
+    @endif
+
     <div class="table-responsive">
         <table class="table table-hover align-middle mb-0">
             <thead class="table-light">
@@ -68,6 +110,16 @@
                             @endif
                         </td>
                         <td class="text-end">
+                            <button
+                                type="button"
+                                class="btn btn-sm btn-primary"
+                                wire:click="sinkronkanMahasiswa({{ $item->id_mahasiswa }})"
+                                wire:loading.attr="disabled"
+                                wire:target="sinkronkanMahasiswa({{ $item->id_mahasiswa }})"
+                            >
+                                <span wire:loading.remove wire:target="sinkronkanMahasiswa({{ $item->id_mahasiswa }})"><i class="ri-refresh-line"></i> Sync</span>
+                                <span wire:loading wire:target="sinkronkanMahasiswa({{ $item->id_mahasiswa }})">Sync...</span>
+                            </button>
                             <button type="button" class="btn btn-sm btn-info" wire:click="bukaPengaturan({{ $item->id_mahasiswa }})">
                                 <i class="ri-settings-3-line"></i> Atur
                             </button>

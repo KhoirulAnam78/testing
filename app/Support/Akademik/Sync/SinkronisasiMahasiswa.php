@@ -24,6 +24,8 @@ final class SinkronisasiMahasiswa
 
     private const CACHE_KEY = 'akademik:hasil-sync:mahasiswa';
 
+    private const KURIKULUM_CACHE_KEY = 'akademik:hasil-sync:kurikulum-mahasiswa';
+
     public function __construct(private readonly AkademikClient $client) {}
 
     /**
@@ -48,11 +50,29 @@ final class SinkronisasiMahasiswa
         return $this->jalankan(fn (): array => $this->sinkronkanSatu($nim));
     }
 
+    /** @return array<string, mixed> */
+    public function handleKurikulum(): array
+    {
+        return $this->jalankan(
+            fn (): array => $this->sinkronkanKurikulum(),
+            self::KURIKULUM_CACHE_KEY
+        );
+    }
+
+    /** @return array<string, mixed> */
+    public function handleKurikulumMahasiswa(Mahasiswa $mahasiswa): array
+    {
+        return $this->jalankan(
+            fn (): array => $this->sinkronkanKurikulumMahasiswa($mahasiswa),
+            null
+        );
+    }
+
     /**
      * @param  callable(): array<string, mixed>  $sinkronisasi
      * @return array<string, mixed>
      */
-    private function jalankan(callable $sinkronisasi): array
+    private function jalankan(callable $sinkronisasi, ?string $cacheKey = self::CACHE_KEY): array
     {
         $lock = Cache::lock('akademik:sync:mahasiswa', 1800);
 
@@ -62,7 +82,9 @@ final class SinkronisasiMahasiswa
 
         try {
             $hasil = $sinkronisasi();
-            Cache::put(self::CACHE_KEY, $hasil, now()->addDays(30));
+            if ($cacheKey !== null) {
+                Cache::put($cacheKey, $hasil, now()->addDays(30));
+            }
 
             return $hasil;
         } finally {
@@ -73,6 +95,100 @@ final class SinkronisasiMahasiswa
     public static function cacheKey(): string
     {
         return self::CACHE_KEY;
+    }
+
+    public static function cacheKeyKurikulum(): string
+    {
+        return self::KURIKULUM_CACHE_KEY;
+    }
+
+    /** @return array<string, mixed> */
+    private function sinkronkanKurikulum(): array
+    {
+        $hasil = [
+            'diperiksa' => 0,
+            'diubah' => 0,
+            'tetap' => 0,
+            'dilewati' => 0,
+            'rincian' => [],
+        ];
+
+        Mahasiswa::query()
+            ->select(['id_mahasiswa', 'nim'])
+            ->orderBy('id_mahasiswa')
+            ->chunkById(self::LIMIT, function ($mahasiswa) use (&$hasil): void {
+                foreach ($mahasiswa as $item) {
+                    $hasil['diperiksa']++;
+
+                    try {
+                        $status = $this->perbaruiKurikulumMahasiswa($item);
+                        $hasil[$status]++;
+                    } catch (DomainException $e) {
+                        $hasil['dilewati']++;
+
+                        if (count($hasil['rincian']) < 20) {
+                            $hasil['rincian'][] = strtoupper($item->nim).': '.$e->getMessage();
+                        }
+                    }
+                }
+            }, 'id_mahasiswa', 'id_mahasiswa');
+
+        return $hasil + [
+            'status' => 'success',
+            'selesai_pada' => now()->format('d-m-Y H:i:s'),
+            'pesan' => $hasil['diperiksa'].' mahasiswa diperiksa; '.$hasil['diubah'].' diubah; '.$hasil['dilewati'].' dilewati.',
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    private function sinkronkanKurikulumMahasiswa(Mahasiswa $mahasiswa): array
+    {
+        $status = $this->perbaruiKurikulumMahasiswa($mahasiswa);
+        $hasil = [
+            'diperiksa' => 1,
+            'diubah' => $status === 'diubah' ? 1 : 0,
+            'tetap' => $status === 'tetap' ? 1 : 0,
+            'dilewati' => 0,
+            'rincian' => [],
+        ];
+
+        return $hasil + [
+            'status' => 'success',
+            'selesai_pada' => now()->format('d-m-Y H:i:s'),
+            'pesan' => $status === 'diubah'
+                ? 'Kurikulum mahasiswa '.strtoupper($mahasiswa->nim).' berhasil disesuaikan.'
+                : 'Kurikulum mahasiswa '.strtoupper($mahasiswa->nim).' sudah sesuai.',
+        ];
+    }
+
+    private function perbaruiKurikulumMahasiswa(Mahasiswa $mahasiswa): string
+    {
+        $detail = $this->ambilDetail(strtolower(trim($mahasiswa->nim)));
+
+        return DB::transaction(function () use ($mahasiswa, $detail): string {
+            $tersimpan = Mahasiswa::query()
+                ->with('prodi:id_prodi,kode')
+                ->lockForUpdate()
+                ->findOrFail($mahasiswa->id_mahasiswa);
+            $kodeKurikulum = $this->mapKurikulum($detail, trim((string) $tersimpan->prodi?->kode));
+            $kurikulum = Kurikulum::query()
+                ->where('prodi_id', $tersimpan->prodi_id)
+                ->where('kode', $kodeKurikulum)
+                ->lockForUpdate()
+                ->first();
+
+            if ($kurikulum === null) {
+                throw new DomainException("Kurikulum {$kodeKurikulum} untuk prodi mahasiswa tidak ditemukan.");
+            }
+
+            if ((int) $tersimpan->kurikulum_id === (int) $kurikulum->id_kurikulum) {
+                return 'tetap';
+            }
+
+            $tersimpan->update(['kurikulum_id' => $kurikulum->id_kurikulum]);
+
+            return 'diubah';
+        });
     }
 
     /**
@@ -320,6 +436,27 @@ final class SinkronisasiMahasiswa
             'prodi_id' => $prodi[$kodeProdi],
             'kode_kurikulum' => $kodeKurikulum,
         ];
+    }
+
+    /** @param array<string, mixed> $item */
+    private function mapKurikulum(array $item, string $kodeProdiLokal): string
+    {
+        $kodeProdi = trim((string) ($item['kd_prodi'] ?? ''));
+        $kodeKurikulum = trim((string) ($item['kd_kur'] ?? ''));
+
+        if ($kodeProdiLokal === '') {
+            throw new DomainException('Program studi mahasiswa lokal tidak ditemukan.');
+        }
+
+        if ($kodeProdi === '' || $kodeProdi !== $kodeProdiLokal) {
+            throw new DomainException('Program studi API tidak sesuai dengan program studi mahasiswa lokal.');
+        }
+
+        if ($kodeKurikulum === '' || strlen($kodeKurikulum) > 255) {
+            throw new DomainException('Kode kurikulum kosong atau tidak valid.');
+        }
+
+        return $kodeKurikulum;
     }
 
     private function mapStatus(mixed $status): string

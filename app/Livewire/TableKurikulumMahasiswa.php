@@ -5,14 +5,18 @@ namespace App\Livewire;
 use App\Models\Kurikulum;
 use App\Models\Mahasiswa;
 use App\Models\Prodi;
+use App\Support\Akademik\Sync\SinkronisasiMahasiswa;
+use DomainException;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Locked;
 use Livewire\Attributes\On;
 use Livewire\Component;
 use Livewire\WithPagination;
+use Throwable;
 
 final class TableKurikulumMahasiswa extends Component
 {
@@ -31,11 +35,15 @@ final class TableKurikulumMahasiswa extends Component
 
     public string $filter_pencarian = '';
 
+    #[Locked]
+    public ?array $hasil_sinkronisasi = null;
+
     protected string $paginationTheme = 'bootstrap';
 
     public function mount(): void
     {
         $this->pastikanBerhak();
+        $this->hasil_sinkronisasi = Cache::get(SinkronisasiMahasiswa::cacheKeyKurikulum());
     }
 
     public function updated($property): void
@@ -87,6 +95,44 @@ final class TableKurikulumMahasiswa extends Component
         $this->dispatch('notify', message: ['status' => 'success', 'message' => 'Kurikulum mahasiswa berhasil diperbarui.']);
     }
 
+    public function sinkronkan(SinkronisasiMahasiswa $sinkronisasi): void
+    {
+        $this->pastikanBerhak();
+
+        try {
+            $this->hasil_sinkronisasi = $sinkronisasi->handleKurikulum();
+            $this->resetPage();
+            $this->dispatch('notify', message: [
+                'status' => 'success',
+                'message' => $this->hasil_sinkronisasi['pesan'],
+            ]);
+        } catch (DomainException $exception) {
+            $this->simpanHasilGagal($exception->getMessage());
+        } catch (Throwable $exception) {
+            report($exception);
+            $this->simpanHasilGagal('Sinkronisasi kurikulum mahasiswa gagal. Periksa koneksi, data lokal, dan format API.');
+        }
+    }
+
+    public function sinkronkanMahasiswa(int $id, SinkronisasiMahasiswa $sinkronisasi): void
+    {
+        $this->pastikanBerhak();
+        $mahasiswa = Mahasiswa::query()->findOrFail($id);
+
+        try {
+            $hasil = $sinkronisasi->handleKurikulumMahasiswa($mahasiswa);
+            $this->dispatch('notify', message: ['status' => 'success', 'message' => $hasil['pesan']]);
+        } catch (DomainException $exception) {
+            $this->dispatch('notify', message: ['status' => 'error', 'message' => $exception->getMessage()]);
+        } catch (Throwable $exception) {
+            report($exception);
+            $this->dispatch('notify', message: [
+                'status' => 'error',
+                'message' => 'Sinkronisasi kurikulum mahasiswa gagal. Periksa koneksi, data lokal, dan format API.',
+            ]);
+        }
+    }
+
     public function render(): View
     {
         $mahasiswa = Mahasiswa::query()
@@ -127,5 +173,26 @@ final class TableKurikulumMahasiswa extends Component
     private function pastikanBerhak(): void
     {
         abort_unless(auth()->user()?->can('kurikulum-mahasiswa:'), 403);
+    }
+
+    private function simpanHasilGagal(string $pesan): void
+    {
+        $this->hasil_sinkronisasi = [
+            'status' => 'error',
+            'selesai_pada' => now()->format('d-m-Y H:i:s'),
+            'diperiksa' => 0,
+            'diubah' => 0,
+            'tetap' => 0,
+            'dilewati' => 0,
+            'rincian' => [],
+            'pesan' => $pesan,
+        ];
+
+        Cache::put(
+            SinkronisasiMahasiswa::cacheKeyKurikulum(),
+            $this->hasil_sinkronisasi,
+            now()->addDays(30)
+        );
+        $this->dispatch('notify', message: ['status' => 'error', 'message' => $pesan]);
     }
 }

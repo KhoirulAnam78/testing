@@ -9,7 +9,11 @@ use App\Support\Akademik\Sync\SinkronisasiMahasiswa;
 $service = new SinkronisasiMahasiswa(new AkademikClient);
 $map = new ReflectionMethod($service, 'map');
 $mapStatus = new ReflectionMethod($service, 'mapStatus');
+$mapKurikulum = new ReflectionMethod($service, 'mapKurikulum');
 $handleSatu = new ReflectionMethod($service, 'handleSatu');
+$handleKurikulum = new ReflectionMethod($service, 'handleKurikulum');
+$handleKurikulumMahasiswa = new ReflectionMethod($service, 'handleKurikulumMahasiswa');
+$perbaruiKurikulumMahasiswa = new ReflectionMethod($service, 'perbaruiKurikulumMahasiswa');
 $emailEfektif = new ReflectionMethod($service, 'emailEfektif');
 
 if (Mahasiswa::STATUS_SYNC_PENDING !== 'pending' || Mahasiswa::STATUS_SYNC_SYNCED !== 'synced') {
@@ -18,6 +22,36 @@ if (Mahasiswa::STATUS_SYNC_PENDING !== 'pending' || Mahasiswa::STATUS_SYNC_SYNCE
 
 if (! $handleSatu->isPublic()) {
     throw new RuntimeException('Sinkronisasi satu mahasiswa tidak tersedia.');
+}
+
+if (! $handleKurikulum->isPublic() || ! $handleKurikulumMahasiswa->isPublic()) {
+    throw new RuntimeException('Sinkronisasi kurikulum mahasiswa tidak tersedia.');
+}
+
+if (SinkronisasiMahasiswa::cacheKeyKurikulum() === SinkronisasiMahasiswa::cacheKey()) {
+    throw new RuntimeException('Cache sinkronisasi kurikulum mahasiswa tidak terpisah.');
+}
+
+if ($mapKurikulum->invoke($service, [
+    'kd_prodi' => ' 111 ',
+    'kd_kur' => ' S1DOK2025 ',
+], '111') !== 'S1DOK2025') {
+    throw new RuntimeException('Mapping kurikulum mahasiswa tidak sesuai kontrak.');
+}
+
+foreach ([
+    [['kd_prodi' => '999', 'kd_kur' => 'S1DOK2025'], '111', 'Program studi API tidak sesuai dengan program studi mahasiswa lokal.'],
+    [['kd_prodi' => '111', 'kd_kur' => ''], '111', 'Kode kurikulum kosong atau tidak valid.'],
+    [['kd_prodi' => '111', 'kd_kur' => 'S1DOK2025'], '', 'Program studi mahasiswa lokal tidak ditemukan.'],
+] as [$payload, $prodiLokal, $message]) {
+    try {
+        $mapKurikulum->invoke($service, $payload, $prodiLokal);
+        throw new RuntimeException('Data assignment kurikulum tidak valid diterima mapper.');
+    } catch (DomainException $e) {
+        if ($e->getMessage() !== $message) {
+            throw $e;
+        }
+    }
 }
 
 if ($emailEfektif->invoke($service, 'lokal@example.com', 'user@example.com', 'api@example.com') !== 'api@example.com'
@@ -32,6 +66,21 @@ $source = file_get_contents(__DIR__.'/../app/Support/Akademik/Sync/SinkronisasiM
 
 if (! is_string($source) || ! str_contains($source, "'/api/data/mahasiswa/'.rawurlencode(\$nim)")) {
     throw new RuntimeException('Sinkronisasi mahasiswa tidak memakai endpoint detail NIM exact.');
+}
+
+$lines = file(__DIR__.'/../app/Support/Akademik/Sync/SinkronisasiMahasiswa.php');
+$methodSource = implode('', array_slice(
+    $lines,
+    $perbaruiKurikulumMahasiswa->getStartLine() - 1,
+    $perbaruiKurikulumMahasiswa->getEndLine() - $perbaruiKurikulumMahasiswa->getStartLine() + 1
+));
+
+if (! str_contains($methodSource, "->update(['kurikulum_id' => \$kurikulum->id_kurikulum])")
+    || str_contains($methodSource, 'status_sync')
+    || str_contains($methodSource, 'email')
+    || str_contains($methodSource, 'foto')
+) {
+    throw new RuntimeException('Sinkronisasi assignment tidak dibatasi hanya pada kurikulum_id.');
 }
 
 $hasil = $map->invoke($service, [
@@ -117,4 +166,4 @@ if (! str_contains($source, "->where('prodi_id', \$data['prodi_id'])")
     throw new RuntimeException('Kontrak email lokal atau pemetaan kurikulum mahasiswa tidak terpenuhi.');
 }
 
-echo "Mapping mahasiswa, fallback email lokal, status, prodi, kurikulum exact, dan metadata sinkronisasi valid.\n";
+echo "Mapping mahasiswa, fallback email lokal, status, prodi, kurikulum exact, assignment kurikulum-only, dan metadata sinkronisasi valid.\n";
