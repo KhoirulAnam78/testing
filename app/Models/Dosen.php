@@ -11,11 +11,22 @@ class Dosen extends Model
 {
     use SoftDeletes;
 
+    public const STATUS_SYNC_PENDING = 'pending';
+
+    public const STATUS_SYNC_SYNCED = 'synced';
+
     protected $table = 'dosen';
 
     protected $primaryKey = 'id_dosen';
 
     protected $guarded = ['id_dosen'];
+
+    protected function casts(): array
+    {
+        return [
+            'synced_at' => 'datetime',
+        ];
+    }
 
     public function user(): BelongsTo
     {

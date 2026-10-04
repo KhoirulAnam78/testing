@@ -103,6 +103,8 @@ class DosenImport implements SkipsEmptyRows, ToCollection, WithHeadingRow
                         'gelar_belakang' => $this->nullableString($row['gelar_belakang'] ?? null),
                         'bidang_keahlian' => $this->nullableString($row['bidang_keahlian'] ?? null),
                         'status' => $status,
+                        'status_sync' => Dosen::STATUS_SYNC_PENDING,
+                        'synced_at' => null,
                     ],
                 );
             }

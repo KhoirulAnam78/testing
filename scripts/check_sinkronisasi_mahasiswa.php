@@ -10,6 +10,7 @@ $service = new SinkronisasiMahasiswa(new AkademikClient);
 $map = new ReflectionMethod($service, 'map');
 $mapStatus = new ReflectionMethod($service, 'mapStatus');
 $handleSatu = new ReflectionMethod($service, 'handleSatu');
+$emailEfektif = new ReflectionMethod($service, 'emailEfektif');
 
 if (Mahasiswa::STATUS_SYNC_PENDING !== 'pending' || Mahasiswa::STATUS_SYNC_SYNCED !== 'synced') {
     throw new RuntimeException('Konstanta status sinkronisasi mahasiswa tidak valid.');
@@ -17,6 +18,14 @@ if (Mahasiswa::STATUS_SYNC_PENDING !== 'pending' || Mahasiswa::STATUS_SYNC_SYNCE
 
 if (! $handleSatu->isPublic()) {
     throw new RuntimeException('Sinkronisasi satu mahasiswa tidak tersedia.');
+}
+
+if ($emailEfektif->invoke($service, 'lokal@example.com', 'user@example.com', 'api@example.com') !== 'api@example.com'
+    || $emailEfektif->invoke($service, 'lokal@example.com', 'user@example.com', null) !== 'user@example.com'
+    || $emailEfektif->invoke($service, 'lokal@example.com', null, null) !== 'lokal@example.com'
+    || $emailEfektif->invoke($service, null, null, null) !== null
+) {
+    throw new RuntimeException('Prioritas email API, user, dan mahasiswa lokal tidak valid.');
 }
 
 $source = file_get_contents(__DIR__.'/../app/Support/Akademik/Sync/SinkronisasiMahasiswa.php');
@@ -58,7 +67,7 @@ foreach ($status as $api => $lokal) {
 }
 
 foreach ([
-    ['email_mhs' => '', 'message' => 'Email kosong atau tidak valid.'],
+    ['email_mhs' => 'email-tidak-valid', 'message' => 'Email tidak valid.'],
     ['kd_prodi' => '999', 'message' => 'Kode prodi 999 tidak ditemukan pada data lokal.'],
     ['kd_kur' => '', 'message' => 'Kode kurikulum kosong atau tidak valid.'],
     ['status' => '?', 'message' => 'Status mahasiswa API tidak dikenali.'],
@@ -84,11 +93,28 @@ foreach ([
     }
 }
 
-if (! str_contains($source, "->where('prodi_id', \$data['prodi_id'])")
-    || ! str_contains($source, "->where('kode', \$data['kode_kurikulum'])")
-    || strpos($source, '$kurikulum = Kurikulum::query()') > strpos($source, '$mahasiswa = Mahasiswa::withTrashed()')
-) {
-    throw new RuntimeException('Pemetaan kurikulum mahasiswa tidak exact atau dijalankan setelah perubahan lokal.');
+$tanpaEmailApi = $map->invoke($service, [
+    'nim' => '20260001',
+    'nama' => 'Nama Mahasiswa',
+    'email_mhs' => '',
+    'hp_mhs' => null,
+    'angkatan' => '2026',
+    'kd_prodi' => '111',
+    'kd_kur' => 'S1DOK2025',
+    'status' => 'A',
+], ['111' => 7]);
+
+if ($tanpaEmailApi['email'] !== null) {
+    throw new RuntimeException('Email API kosong tidak dipetakan menjadi null.');
 }
 
-echo "Mapping mahasiswa, status, email, prodi, kurikulum exact, dan metadata sinkronisasi valid.\n";
+if (! str_contains($source, "->where('prodi_id', \$data['prodi_id'])")
+    || ! str_contains($source, "->where('kode', \$data['kode_kurikulum'])")
+    || ! str_contains($source, "\$data['email'] = \$this->emailEfektif(\$mahasiswa?->email, \$user?->email, \$data['email'])")
+    || ! str_contains($source, "throw new DomainException('Email API dan email lokal tidak tersedia.')")
+    || strpos($source, '$kurikulum = Kurikulum::query()') > strpos($source, '$mahasiswa = Mahasiswa::withTrashed()')
+) {
+    throw new RuntimeException('Kontrak email lokal atau pemetaan kurikulum mahasiswa tidak terpenuhi.');
+}
+
+echo "Mapping mahasiswa, fallback email lokal, status, prodi, kurikulum exact, dan metadata sinkronisasi valid.\n";

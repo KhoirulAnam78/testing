@@ -97,6 +97,8 @@ new #[Layout('layouts.app')] class extends Component
         $payload['user_id'] = $payload['user_id'] ?: null;
         $payload['prodi_id'] = $payload['prodi_id'] ?: null;
         $payload['email'] = strtolower($payload['email']);
+        $payload['status_sync'] = Dosen::STATUS_SYNC_PENDING;
+        $payload['synced_at'] = null;
         $username = strtolower(trim((string) ($payload['nip'] ?: $payload['nidn'])));
 
         if ($username === '') {

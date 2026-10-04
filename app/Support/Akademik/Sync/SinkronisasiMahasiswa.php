@@ -277,13 +277,14 @@ final class SinkronisasiMahasiswa
     /**
      * @param  array<string, mixed>  $item
      * @param  array<string, int>  $prodi
-     * @return array{nim: string, nama: string, email: string, no_hp: ?string, angkatan: int, status: string, prodi_id: int, kode_kurikulum: string}
+     * @return array{nim: string, nama: string, email: ?string, no_hp: ?string, angkatan: int, status: string, prodi_id: int, kode_kurikulum: string}
      */
     private function map(array $item, array $prodi): array
     {
         $nim = strtolower(trim((string) ($item['nim'] ?? '')));
         $nama = trim((string) ($item['nama'] ?? ''));
         $email = strtolower(trim((string) ($item['email_mhs'] ?? '')));
+        $email = $email === '' ? null : $email;
         $kodeProdi = trim((string) ($item['kd_prodi'] ?? ''));
         $kodeKurikulum = trim((string) ($item['kd_kur'] ?? ''));
         $angkatan = trim((string) ($item['angkatan'] ?? ''));
@@ -292,8 +293,8 @@ final class SinkronisasiMahasiswa
             throw new DomainException('NIM atau nama tidak valid.');
         }
 
-        if (! filter_var($email, FILTER_VALIDATE_EMAIL) || strlen($email) > 255) {
-            throw new DomainException('Email kosong atau tidak valid.');
+        if ($email !== null && (! filter_var($email, FILTER_VALIDATE_EMAIL) || strlen($email) > 255)) {
+            throw new DomainException('Email tidak valid.');
         }
 
         if (! array_key_exists($kodeProdi, $prodi)) {
@@ -333,7 +334,7 @@ final class SinkronisasiMahasiswa
     }
 
     /**
-     * @param  array{nim: string, nama: string, email: string, no_hp: ?string, angkatan: int, status: string, prodi_id: int, kode_kurikulum: string}  $data
+     * @param  array{nim: string, nama: string, email: ?string, no_hp: ?string, angkatan: int, status: string, prodi_id: int, kode_kurikulum: string}  $data
      * @return array{hasil: string, user: User}
      */
     private function simpan(array $data): array
@@ -353,6 +354,12 @@ final class SinkronisasiMahasiswa
             $data['kurikulum_id'] = $kurikulum->id_kurikulum;
             $mahasiswa = Mahasiswa::withTrashed()->where('nim', $data['nim'])->lockForUpdate()->first();
             $user = $mahasiswa?->user;
+            $data['email'] = $this->emailEfektif($mahasiswa?->email, $user?->email, $data['email']);
+
+            if ($data['email'] === null) {
+                throw new DomainException('Email API dan email lokal tidak tersedia.');
+            }
+
             $usernameConflict = User::query()->where('username', $data['nim'])
                 ->when($user, fn ($query) => $query->whereKeyNot($user->id))
                 ->exists();
@@ -502,6 +509,11 @@ final class SinkronisasiMahasiswa
         }
 
         return false;
+    }
+
+    private function emailEfektif(?string $emailLokal, ?string $emailUser, ?string $emailApi): ?string
+    {
+        return $emailApi ?? $emailUser ?? $emailLokal;
     }
 
     private function nullableString(mixed $value): ?string

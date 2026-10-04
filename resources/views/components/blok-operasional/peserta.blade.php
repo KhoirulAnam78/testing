@@ -70,18 +70,22 @@ new class extends Component
      */
     private function blok(): Blok
     {
-        return Blok::select(['id', 'prodi_id', 'tanggal_mulai'])->findOrFail($this->blok_id);
+        return Blok::select(['id', 'prodi_id', 'semester_id', 'tanggal_mulai'])->findOrFail($this->blok_id);
     }
 
     /**
      * Pencarian dan pengurutan dilakukan di SQL, bukan pada koleksi PHP,
      * karena satu blok bisa berisi ratusan peserta.
      */
-    private function pesertaQuery()
+    private function pesertaQuery(Blok $blok)
     {
         return PesertaBlok::query()
-            ->select('peserta_blok.*')
+            ->select(['peserta_blok.*', 'registrasi.status as status_registrasi'])
             ->join('mahasiswa', 'mahasiswa.id_mahasiswa', '=', 'peserta_blok.mahasiswa_id')
+            ->leftJoin('status_registrasi_mahasiswa as registrasi', function ($join) use ($blok) {
+                $join->on('registrasi.mahasiswa_id', '=', 'mahasiswa.id_mahasiswa')
+                    ->where('registrasi.semester_id', $blok->semester_id);
+            })
             ->where('peserta_blok.blok_id', $this->blok_id)
             ->when($this->peserta_search !== '', function ($query) {
                 $search = '%'.$this->peserta_search.'%';
@@ -99,18 +103,29 @@ new class extends Component
     private function kandidatQuery(Blok $blok)
     {
         return Mahasiswa::query()
-            ->select(['id_mahasiswa', 'nim', 'nama', 'angkatan'])
-            ->where('status', 'aktif')
-            ->where('prodi_id', $blok->prodi_id)
+            ->select([
+                'mahasiswa.id_mahasiswa',
+                'mahasiswa.nim',
+                'mahasiswa.nama',
+                'mahasiswa.angkatan',
+                'registrasi.status as status_registrasi',
+            ])
+            ->leftJoin('status_registrasi_mahasiswa as registrasi', function ($join) use ($blok) {
+                $join->on('registrasi.mahasiswa_id', '=', 'mahasiswa.id_mahasiswa')
+                    ->where('registrasi.semester_id', $blok->semester_id);
+            })
+            ->where('mahasiswa.status', 'aktif')
+            ->where('mahasiswa.prodi_id', $blok->prodi_id)
             ->whereDoesntHave('peserta_blok', fn ($query) => $query->where('blok_id', $this->blok_id))
             ->when($this->kandidat_search !== '', function ($query) {
                 $search = '%'.$this->kandidat_search.'%';
 
                 $query->where(function ($inner) use ($search) {
-                    $inner->where('nama', 'like', $search)->orWhere('nim', 'like', $search);
+                    $inner->where('mahasiswa.nama', 'like', $search)
+                        ->orWhere('mahasiswa.nim', 'like', $search);
                 });
             })
-            ->orderBy('nama');
+            ->orderBy('mahasiswa.nama');
     }
 
     /**
@@ -287,7 +302,7 @@ new class extends Component
 
     public function togglePagePeserta(): void
     {
-        $ids = $this->pesertaQuery()
+        $ids = $this->pesertaQuery($this->blok())
             ->paginate($this->perPage($this->peserta_per_page), pageName: 'pesertaPage')
             ->pluck('id_peserta_blok')
             ->map(fn ($id) => (string) $id)
@@ -351,7 +366,7 @@ new class extends Component
         $blok = $this->blok();
 
         return $this->view([
-            'peserta' => $this->pesertaQuery()->paginate($this->perPage($this->peserta_per_page), pageName: 'pesertaPage'),
+            'peserta' => $this->pesertaQuery($blok)->paginate($this->perPage($this->peserta_per_page), pageName: 'pesertaPage'),
             'kandidat' => $this->kandidatQuery($blok)->paginate($this->perPage($this->kandidat_per_page), pageName: 'kandidatPage'),
             'rombelOptions' => Kelas::where('blok_id', $this->blok_id)
                 ->orderBy('kode')
@@ -415,6 +430,15 @@ new class extends Component
                             <label class="form-check-label w-100" for="kandidat-{{ $item->id_mahasiswa }}">
                                 <span class="fw-semibold">{{ $item->nama }}</span>
                                 <span class="text-muted d-block small">{{ $item->nim }} &middot; angkatan {{ $item->angkatan }}</span>
+                                <span @class([
+                                    'badge mt-1',
+                                    'bg-success-subtle text-success' => $item->status_registrasi === 'aktif',
+                                    'bg-warning-subtle text-warning' => $item->status_registrasi === 'cuti',
+                                    'bg-danger-subtle text-danger' => $item->status_registrasi === 'nonaktif',
+                                    'bg-secondary-subtle text-secondary' => ! in_array($item->status_registrasi, ['aktif', 'cuti', 'nonaktif'], true),
+                                ])>
+                                    {{ $item->status_registrasi ? ucfirst(str_replace('_', ' ', $item->status_registrasi)) : 'Belum diatur' }}
+                                </span>
                             </label>
                         </div>
                     @empty
@@ -476,7 +500,7 @@ new class extends Component
                                         @checked($pesertaPageAllSelected) @disabled($pesertaPageIds === [])>
                                 </th>
                                 <th>Mahasiswa</th>
-                                <th>Status Kontrak</th>
+                                <th>Status Registrasi</th>
                                 @if ($rombelOptions->isNotEmpty())
                                     <th>Rombel</th>
                                 @endif
@@ -498,11 +522,13 @@ new class extends Component
                                     <td>
                                         <span @class([
                                             'badge',
-                                            'bg-primary-subtle text-primary' => $item->status === 'aktif',
-                                            'bg-warning-subtle text-warning' => $item->status === 'mengulang',
-                                            'bg-success-subtle text-success' => $item->status === 'selesai',
-                                            'bg-secondary-subtle text-secondary' => ! in_array($item->status, ['aktif', 'mengulang', 'selesai'], true),
-                                        ])>{{ ucfirst($item->status) }}</span>
+                                            'bg-success-subtle text-success' => $item->status_registrasi === 'aktif',
+                                            'bg-warning-subtle text-warning' => $item->status_registrasi === 'cuti',
+                                            'bg-danger-subtle text-danger' => $item->status_registrasi === 'nonaktif',
+                                            'bg-secondary-subtle text-secondary' => ! in_array($item->status_registrasi, ['aktif', 'cuti', 'nonaktif'], true),
+                                        ])>
+                                            {{ $item->status_registrasi ? ucfirst(str_replace('_', ' ', $item->status_registrasi)) : 'Belum diatur' }}
+                                        </span>
                                     </td>
                                     @if ($rombelOptions->isNotEmpty())
                                         <td>

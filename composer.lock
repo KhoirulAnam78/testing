@@ -2396,16 +2396,16 @@
         },
         {
             "name": "livewire/livewire",
-            "version": "v4.3.0",
+            "version": "v4.4.7",
             "source": {
                 "type": "git",
                 "url": "https://github.com/livewire/livewire.git",
-                "reference": "19ebb1ee4d057debceccf70ff01950e6a6114edc"
+                "reference": "5976d18b1c808287017a17337d9e68dc1ca64ca2"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/livewire/livewire/zipball/19ebb1ee4d057debceccf70ff01950e6a6114edc",
-                "reference": "19ebb1ee4d057debceccf70ff01950e6a6114edc",
+                "url": "https://api.github.com/repos/livewire/livewire/zipball/5976d18b1c808287017a17337d9e68dc1ca64ca2",
+                "reference": "5976d18b1c808287017a17337d9e68dc1ca64ca2",
                 "shasum": ""
             },
             "require": {
@@ -2460,7 +2460,7 @@
             "description": "A front-end framework for Laravel.",
             "support": {
                 "issues": "https://github.com/livewire/livewire/issues",
-                "source": "https://github.com/livewire/livewire/tree/v4.3.0"
+                "source": "https://github.com/livewire/livewire/tree/v4.4.7"
             },
             "funding": [
                 {
@@ -2468,7 +2468,7 @@
                     "type": "github"
                 }
             ],
-            "time": "2026-05-01T00:46:07+00:00"
+            "time": "2026-09-28T18:12:51+00:00"
         },
         {
             "name": "maatwebsite/excel",
@@ -3591,31 +3591,31 @@
         },
         {
             "name": "power-components/livewire-powergrid",
-            "version": "v6.10.1",
+            "version": "v6.11.1",
             "source": {
                 "type": "git",
                 "url": "https://github.com/Power-Components/livewire-powergrid.git",
-                "reference": "19245083438fa0571f03418e0b719e1e0ebb0428"
+                "reference": "4bb2cade45d8ca99fd44201cdbac057f1e702e86"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/Power-Components/livewire-powergrid/zipball/19245083438fa0571f03418e0b719e1e0ebb0428",
-                "reference": "19245083438fa0571f03418e0b719e1e0ebb0428",
+                "url": "https://api.github.com/repos/Power-Components/livewire-powergrid/zipball/4bb2cade45d8ca99fd44201cdbac057f1e702e86",
+                "reference": "4bb2cade45d8ca99fd44201cdbac057f1e702e86",
                 "shasum": ""
             },
             "require": {
-                "laravel/prompts": "*",
+                "laravel/prompts": "^0.1|^0.2|^0.3",
                 "livewire/livewire": "^3.7|^4.0",
                 "php": "^8.2"
             },
             "require-dev": {
-                "composer/composer": "^2.8",
-                "laradumps/laradumps": "^4.6",
-                "larastan/larastan": "^2.0|^3.0",
+                "composer/composer": "^2.9",
+                "laradumps/laradumps": "^4.6|^5.0",
+                "larastan/larastan": "^2.0|^3.0|^4.0",
                 "laravel/pint": "^1.26",
                 "laravel/scout": "^10.11.3",
                 "openspout/openspout": "^4.24.5|^5.0",
-                "orchestra/testbench": "^9.4|^10.0",
+                "orchestra/testbench": "^9.4|^10.0|^11.0",
                 "pestphp/pest": "^3.0|^4.0"
             },
             "suggest": {
@@ -3657,7 +3657,7 @@
             "homepage": "https://github.com/power-components/livewire-powergrid",
             "support": {
                 "issues": "https://github.com/Power-Components/livewire-powergrid/issues",
-                "source": "https://github.com/Power-Components/livewire-powergrid/tree/v6.10.1"
+                "source": "https://github.com/Power-Components/livewire-powergrid/tree/v6.11.1"
             },
             "funding": [
                 {
@@ -3665,7 +3665,7 @@
                     "type": "github"
                 }
             ],
-            "time": "2026-05-04T17:42:52+00:00"
+            "time": "2026-09-21T16:54:09+00:00"
         },
         {
             "name": "psr/clock",
