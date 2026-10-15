@@ -11,10 +11,6 @@ new #[Layout('layouts.app')] class extends Component
 {
     use WithFileUploads;
 
-    public string $name = '';
-
-    public string $username = '';
-
     public string $email = '';
 
     public $foto;
@@ -27,27 +23,18 @@ new #[Layout('layouts.app')] class extends Component
 
     public function mount(): void
     {
-        $user = auth()->user();
-        $this->name = $user->name;
-        $this->username = $user->username;
-        $this->email = $user->email;
+        $this->email = auth()->user()->email;
     }
 
     public function updateProfile(): void
     {
         $user = auth()->user();
         $this->email = strtolower(trim($this->email));
-        $this->username = trim($this->username);
 
         $validated = $this->validate([
-            'name' => ['required', 'string', 'max:255'],
-            'username' => ['required', 'string', 'max:255', Rule::unique('users', 'username')->ignore($user->id)],
             'email' => ['required', 'string', 'lowercase', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
             'foto' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
         ], [
-            'name.required' => 'Nama wajib diisi.',
-            'username.required' => 'Username wajib diisi.',
-            'username.unique' => 'Username sudah digunakan.',
             'email.required' => 'Email wajib diisi.',
             'email.email' => 'Format email tidak valid.',
             'email.unique' => 'Email sudah digunakan.',
@@ -156,15 +143,13 @@ new #[Layout('layouts.app')] class extends Component
                         <div class="row g-3">
                             <div class="col-md-6">
                                 <label class="form-label" for="name">Nama</label>
-                                <input type="text" wire:model="name" id="name"
-                                    class="form-control @error('name') is-invalid @enderror" autocomplete="name">
-                                @error('name') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                                <input type="text" id="name" class="form-control"
+                                    value="{{ auth()->user()->name }}" autocomplete="name" readonly>
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label" for="username">Username</label>
-                                <input type="text" wire:model="username" id="username"
-                                    class="form-control @error('username') is-invalid @enderror" autocomplete="username">
-                                @error('username') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                                <input type="text" id="username" class="form-control"
+                                    value="{{ auth()->user()->username }}" autocomplete="username" readonly>
                             </div>
                             <div class="col-12">
                                 <label class="form-label" for="email">Email</label>

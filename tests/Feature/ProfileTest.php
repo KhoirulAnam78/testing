@@ -27,39 +27,41 @@ class ProfileTest extends TestCase
             ->get('/profile')
             ->assertOk()
             ->assertSee('Profil & Akun', false)
-            ->assertSee($user->username);
+            ->assertSee($user->username)
+            ->assertSeeHtml('autocomplete="name" readonly')
+            ->assertSeeHtml('autocomplete="username" readonly');
     }
 
-    public function test_informasi_akun_dapat_diperbarui(): void
+    public function test_email_dapat_diperbarui_tanpa_mengubah_nama_dan_username(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->create([
+            'name' => 'Nama Lama',
+            'username' => 'username-lama',
+        ]);
 
         Livewire::actingAs($user)
             ->test('pages::profile')
-            ->set('name', 'Nama Baru')
-            ->set('username', 'username-baru')
             ->set('email', 'BARU@example.test')
             ->call('updateProfile')
             ->assertHasNoErrors();
 
         $user->refresh();
-        $this->assertSame('Nama Baru', $user->name);
-        $this->assertSame('username-baru', $user->username);
+        $this->assertSame('Nama Lama', $user->name);
+        $this->assertSame('username-lama', $user->username);
         $this->assertSame('baru@example.test', $user->email);
         $this->assertNull($user->email_verified_at);
     }
 
-    public function test_username_dan_email_harus_unik(): void
+    public function test_email_harus_unik(): void
     {
         $user = User::factory()->create();
         $lain = User::factory()->create();
 
         Livewire::actingAs($user)
             ->test('pages::profile')
-            ->set('username', $lain->username)
             ->set('email', $lain->email)
             ->call('updateProfile')
-            ->assertHasErrors(['username' => 'unique', 'email' => 'unique']);
+            ->assertHasErrors(['email' => 'unique']);
     }
 
     public function test_foto_profil_dapat_diunggah_dan_foto_lama_dihapus(): void
