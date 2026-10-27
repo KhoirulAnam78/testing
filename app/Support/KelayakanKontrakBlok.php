@@ -127,7 +127,13 @@ class KelayakanKontrakBlok
     private function nilaiTerbaik(Mahasiswa $mahasiswa, int $mataKuliahId, Collection $detailSkala): ?array
     {
         $nilai = SnapshotDpnaPeserta::query()
-            ->select(['snapshot_dpna_peserta.nilai_akhir', 'finalisasi_dpna_blok.difinalisasi_pada'])
+            ->select([
+                'snapshot_dpna_peserta.nilai_akhir',
+                'snapshot_dpna_peserta.nilai_huruf',
+                'snapshot_dpna_peserta.nilai_indeks',
+                'snapshot_dpna_peserta.boleh_perbaikan',
+                'finalisasi_dpna_blok.difinalisasi_pada',
+            ])
             ->join('finalisasi_dpna_blok', 'finalisasi_dpna_blok.id_finalisasi_dpna_blok', '=', 'snapshot_dpna_peserta.finalisasi_dpna_blok_id')
             ->join('blok', 'blok.id', '=', 'finalisasi_dpna_blok.blok_id')
             ->where('snapshot_dpna_peserta.nim', $mahasiswa->nim)
@@ -136,6 +142,17 @@ class KelayakanKontrakBlok
             ->get()
             ->map(function ($snapshot) use ($detailSkala) {
                 $akhir = (float) $snapshot->nilai_akhir;
+                if ($snapshot->nilai_indeks !== null && $snapshot->nilai_huruf !== null) {
+                    return [
+                        'nilai_indeks' => (float) $snapshot->nilai_indeks,
+                        'nilai_akhir' => $akhir,
+                        'nilai_huruf' => $snapshot->nilai_huruf,
+                        'boleh_perbaikan' => (bool) $snapshot->boleh_perbaikan,
+                        'difinalisasi_pada' => $snapshot->difinalisasi_pada,
+                    ];
+                }
+
+                // ponytail: fallback hanya untuk snapshot lama; hapus setelah seluruh histori sudah memiliki grade beku.
                 $detail = $detailSkala->first(fn (SkalaNilaiDetail $item) => $akhir >= (float) $item->nilai_angka_min
                     && $akhir <= (float) $item->nilai_angka_max);
 

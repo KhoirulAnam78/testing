@@ -10,7 +10,6 @@ use App\Support\Akademik\Sync\SinkronisasiStatusRegistrasiMahasiswa;
 use DomainException;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -42,16 +41,12 @@ final class TableStatusRegistrasiMahasiswa extends Component
 
     public string $filter_pencarian = '';
 
-    #[Locked]
-    public ?array $hasil_sinkronisasi = null;
-
     protected string $paginationTheme = 'bootstrap';
 
     public function mount(): void
     {
         $this->pastikanBerhak();
         $this->filter_semester_id = Semester::where('is_aktif', true)->value('id_semester') ?: '';
-        $this->muatHasilSinkronisasi();
     }
 
     public function updated($property): void
@@ -61,9 +56,6 @@ final class TableStatusRegistrasiMahasiswa extends Component
             $this->tutupPengaturan();
         }
 
-        if ($property === 'filter_semester_id') {
-            $this->muatHasilSinkronisasi();
-        }
     }
 
     public function bukaPengaturan(int $id): void
@@ -132,41 +124,6 @@ final class TableStatusRegistrasiMahasiswa extends Component
             'status' => 'success',
             'message' => 'Status registrasi mahasiswa berhasil diperbarui.',
         ]);
-    }
-
-    public function sinkronkan(SinkronisasiStatusRegistrasiMahasiswa $sinkronisasi): void
-    {
-        $this->pastikanBerhak();
-        $this->validate([
-            'filter_semester_id' => ['required', Rule::exists('semester', 'id_semester')->whereNull('deleted_at')],
-        ], [
-            'filter_semester_id.required' => 'Semester wajib dipilih sebelum sinkronisasi.',
-            'filter_semester_id.exists' => 'Semester tidak ditemukan.',
-        ]);
-
-        $semester = Semester::query()->findOrFail($this->filter_semester_id);
-
-        try {
-            $this->hasil_sinkronisasi = $sinkronisasi->handle($semester);
-            $this->resetPage();
-            $this->dispatch('notify', message: [
-                'status' => 'success',
-                'message' => 'Status registrasi mahasiswa berhasil disinkronkan.',
-            ]);
-        } catch (DomainException $exception) {
-            $this->simpanHasilGagal($semester, $exception->getMessage());
-            $this->dispatch('notify', message: [
-                'status' => 'error',
-                'message' => $exception->getMessage(),
-            ]);
-        } catch (Throwable $exception) {
-            report($exception);
-            $this->simpanHasilGagal($semester, 'Sinkronisasi gagal karena kesalahan internal.');
-            $this->dispatch('notify', message: [
-                'status' => 'error',
-                'message' => 'Sinkronisasi gagal karena kesalahan internal.',
-            ]);
-        }
     }
 
     public function sinkronkanMahasiswa(int $id, SinkronisasiStatusRegistrasiMahasiswa $sinkronisasi): void
@@ -260,34 +217,5 @@ final class TableStatusRegistrasiMahasiswa extends Component
     private function pastikanBerhak(): void
     {
         abort_unless(auth()->user()?->can('status-registrasi-mahasiswa:'), 403);
-    }
-
-    private function muatHasilSinkronisasi(): void
-    {
-        $this->hasil_sinkronisasi = $this->filter_semester_id
-            ? Cache::get(SinkronisasiStatusRegistrasiMahasiswa::cacheKey((int) $this->filter_semester_id))
-            : null;
-    }
-
-    private function simpanHasilGagal(Semester $semester, string $pesan): void
-    {
-        $this->hasil_sinkronisasi = [
-            'status' => 'error',
-            'semester' => $semester->kode,
-            'selesai_pada' => now()->format('d-m-Y H:i:s'),
-            'diterima' => 0,
-            'dibuat' => 0,
-            'diubah' => 0,
-            'tetap' => 0,
-            'dilewati' => 0,
-            'gagal' => 0,
-            'pesan' => $pesan,
-        ];
-
-        Cache::put(
-            SinkronisasiStatusRegistrasiMahasiswa::cacheKey($semester->id_semester),
-            $this->hasil_sinkronisasi,
-            now()->addDays(30)
-        );
     }
 }

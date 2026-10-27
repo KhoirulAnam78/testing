@@ -15,7 +15,13 @@ class SnapshotDpnaPeserta extends Model
 
     protected function casts(): array
     {
-        return ['nilai_akhir' => 'decimal:2', 'sumber_json' => 'array'];
+        return [
+            'nilai_akhir' => 'decimal:2',
+            'nilai_indeks' => 'decimal:2',
+            'lulus' => 'boolean',
+            'boleh_perbaikan' => 'boolean',
+            'sumber_json' => 'array',
+        ];
     }
 
     public function finalisasi_dpna_blok(): BelongsTo

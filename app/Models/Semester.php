@@ -13,6 +13,8 @@ class Semester extends Model
 {
     use SoftDeletes;
 
+    public const SEMESTER_TERAKHIR_SUMBER_API = 20261;
+
     protected $table = 'semester';
 
     protected $primaryKey = 'id_semester';
@@ -26,6 +28,16 @@ class Semester extends Model
             'kontrak_mulai' => 'datetime',
             'kontrak_selesai' => 'datetime',
         ];
+    }
+
+    public function bersumberDariApi(): bool
+    {
+        return (int) $this->kode <= self::SEMESTER_TERAKHIR_SUMBER_API;
+    }
+
+    public function dikelolaLokal(): bool
+    {
+        return ! $this->bersumberDariApi();
     }
 
     public function kontrakSedangDibuka(): bool
@@ -96,5 +108,10 @@ class Semester extends Model
     public function status_registrasi_mahasiswa(): HasMany
     {
         return $this->hasMany(StatusRegistrasiMahasiswa::class, 'semester_id', 'id_semester');
+    }
+
+    public function kelas_kuliah(): HasMany
+    {
+        return $this->hasMany(KelasKuliah::class, 'semester_id', 'id_semester');
     }
 }

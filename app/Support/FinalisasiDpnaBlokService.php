@@ -61,6 +61,26 @@ final class FinalisasiDpnaBlokService
                 throw ValidationException::withMessages(['finalisasi' => 'Total bobot sumber DPNA wajib tepat 100%.']);
             }
 
+            $skala = $blok->kurikulum_mata_kuliah?->kurikulum?->skala_nilai;
+            $detailSkala = $skala?->detail ?? collect();
+            if (! $skala || $detailSkala->isEmpty()) {
+                throw ValidationException::withMessages(['finalisasi' => 'Skala nilai kurikulum blok belum lengkap.']);
+            }
+
+            $snapshotSkala = [
+                'id' => $skala->id_skala_nilai,
+                'nama' => $skala->nama,
+                'versi' => $skala->versi,
+                'detail' => $detailSkala->map(fn ($item) => [
+                    'nilai_angka_min' => (float) $item->nilai_angka_min,
+                    'nilai_angka_max' => (float) $item->nilai_angka_max,
+                    'nilai_huruf' => $item->nilai_huruf,
+                    'nilai_indeks' => (float) $item->nilai_indeks,
+                    'lulus' => (bool) $item->lulus,
+                    'boleh_perbaikan' => (bool) $item->boleh_perbaikan,
+                ])->values()->all(),
+            ];
+
             $finalisasi = FinalisasiDpnaBlok::create([
                 'blok_id' => $blok->id,
                 'versi' => ($terakhir?->versi ?? 0) + 1,
@@ -68,6 +88,7 @@ final class FinalisasiDpnaBlokService
                 'konfigurasi_json' => [
                     'kehadiran' => ['aktif' => (bool) $blok->kehadiran_masuk_dpna, 'bobot' => (float) $blok->bobot_kehadiran_dpna],
                     'menggunakan_grup' => $data['menggunakan_grup'],
+                    'skala_nilai' => $snapshotSkala,
                     'grup' => $data['grup']->map(fn ($item) => [
                         'id' => $item->id_grup_dpna_blok,
                         'nama' => $item->nama,
@@ -90,12 +111,24 @@ final class FinalisasiDpnaBlokService
             ]);
 
             foreach ($data['baris'] as $row) {
+                $nilaiAkhir = (float) $row['nilai_akhir'];
+                $grade = $detailSkala->first(fn ($item) => $nilaiAkhir >= (float) $item->nilai_angka_min
+                    && $nilaiAkhir <= (float) $item->nilai_angka_max);
+                if (! $grade) {
+                    throw ValidationException::withMessages(['finalisasi' => "Nilai akhir {$nilaiAkhir} tidak tercakup dalam skala nilai."]);
+                }
+
                 SnapshotDpnaPeserta::create([
                     'finalisasi_dpna_blok_id' => $finalisasi->id_finalisasi_dpna_blok,
                     'peserta_blok_id' => $row['peserta']->id_peserta_blok,
                     'nim' => $row['peserta']->mahasiswa->nim,
                     'nama_mahasiswa' => $row['peserta']->mahasiswa->nama,
-                    'nilai_akhir' => $row['nilai_akhir'],
+                    'nilai_akhir' => $nilaiAkhir,
+                    'skala_nilai_id' => $skala->id_skala_nilai,
+                    'nilai_huruf' => $grade->nilai_huruf,
+                    'nilai_indeks' => $grade->nilai_indeks,
+                    'lulus' => $grade->lulus,
+                    'boleh_perbaikan' => $grade->boleh_perbaikan,
                     'sumber_json' => $row['sumber_detail'],
                 ]);
             }

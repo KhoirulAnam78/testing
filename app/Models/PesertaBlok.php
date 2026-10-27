@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class PesertaBlok extends Model
@@ -65,5 +66,10 @@ class PesertaBlok extends Model
     public function snapshot_dpna_peserta(): HasMany
     {
         return $this->hasMany(SnapshotDpnaPeserta::class, 'peserta_blok_id', 'id_peserta_blok');
+    }
+
+    public function anggota_kelas_kuliah(): HasOne
+    {
+        return $this->hasOne(AnggotaKelasKuliah::class, 'peserta_blok_id', 'id_peserta_blok');
     }
 }

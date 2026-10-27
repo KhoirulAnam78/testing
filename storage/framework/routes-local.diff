@@ -1,0 +1,14 @@
+﻿diff --git a/routes/web.php b/routes/web.php
+index 6c5e633..810f62d 100644
+--- a/routes/web.php
++++ b/routes/web.php
+@@ -134,6 +134,9 @@
+     Route::livewire('dpna-blok/detail/{id}', 'pages::dpna-blok.detail')
+         ->name('dpna-blok.detail');
+ 
++    Route::livewire('sinkronisasi', 'pages::sinkronisasi.kelas-kuliah')
++        ->name('sinkronisasi.index');
++
+     // Portal Saya: halaman yang di-scope ke user yang login, bukan CRUD master data.
+     Route::livewire('pertemuan-saya', 'pages::pertemuan-saya.index')
+         ->name('pertemuan-saya.index');

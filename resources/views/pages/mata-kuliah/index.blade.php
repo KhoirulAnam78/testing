@@ -2,14 +2,7 @@
 
 use App\Exports\ArrayTemplateExport;
 use App\Imports\MataKuliahImport;
-use App\Models\Prodi;
-use App\Support\Akademik\Sync\SinkronisasiMataKuliah;
-use Illuminate\Database\Query\Builder;
-use Illuminate\Support\Facades\Cache;
-use Illuminate\Validation\Rule;
 use Livewire\Attributes\Layout;
-use Livewire\Attributes\Locked;
-use Livewire\Attributes\On;
 use Livewire\Component;
 use Livewire\WithFileUploads;
 use Maatwebsite\Excel\Facades\Excel;
@@ -20,21 +13,9 @@ new #[Layout('layouts.app')] class extends Component
 
     public $importFile;
 
-    public string $prodi_id = '';
-
-    public $prodi = [];
-
-    #[Locked]
-    public ?array $hasil_sinkronisasi = null;
-
     public function mount(): void
     {
         abort_unless(auth()->user()?->can('mata-kuliah:'), 403);
-        $this->prodi = Prodi::query()
-            ->where('status', 'aktif')
-            ->orderBy('nama')
-            ->get(['id_prodi', 'kode', 'nama']);
-        $this->hasil_sinkronisasi = Cache::get(SinkronisasiMataKuliah::cacheKey());
     }
 
     public function import()
@@ -69,65 +50,6 @@ new #[Layout('layouts.app')] class extends Component
         ]), 'template-import-mata-kuliah.xlsx');
     }
 
-    public function sinkronkan(SinkronisasiMataKuliah $sinkronisasi): void
-    {
-        abort_unless(
-            auth()->user()?->can('mata-kuliah:tambah') && auth()->user()?->can('mata-kuliah:edit'),
-            403
-        );
-
-        $this->validate([
-            'prodi_id' => [
-                'required',
-                Rule::exists('prodi', 'id_prodi')->where(fn (Builder $query) => $query
-                    ->where('status', 'aktif')
-                    ->whereNull('deleted_at')),
-            ],
-        ], [
-            'prodi_id.required' => 'Program studi wajib dipilih.',
-            'prodi_id.exists' => 'Program studi aktif tidak ditemukan.',
-        ]);
-
-        try {
-            $prodi = Prodi::query()->findOrFail((int) $this->prodi_id);
-            $this->hasil_sinkronisasi = $sinkronisasi->handle($prodi);
-            $this->dispatch('mata-kuliah-disinkronkan');
-            $this->dispatch('notify', message: [
-                'status' => 'success',
-                'message' => $this->hasil_sinkronisasi['pesan'],
-            ]);
-        } catch (DomainException $e) {
-            $this->simpanHasilGagal($e->getMessage());
-        } catch (Throwable $e) {
-            report($e);
-            $this->simpanHasilGagal('Sinkronisasi mata kuliah gagal. Periksa koneksi dan format data API.');
-        }
-    }
-
-    #[On('mata-kuliah-disinkronkan')]
-    public function muatHasilSinkronisasi(): void
-    {
-        $this->hasil_sinkronisasi = Cache::get(SinkronisasiMataKuliah::cacheKey());
-    }
-
-    private function simpanHasilGagal(string $pesan): void
-    {
-        $this->hasil_sinkronisasi = [
-            'status' => 'error',
-            'prodi' => null,
-            'selesai_pada' => now()->format('d-m-Y H:i:s'),
-            'diterima' => 0,
-            'unik' => 0,
-            'dibuat' => 0,
-            'diubah' => 0,
-            'dipulihkan' => 0,
-            'tetap' => 0,
-            'pesan' => $pesan,
-        ];
-
-        Cache::put(SinkronisasiMataKuliah::cacheKey(), $this->hasil_sinkronisasi, now()->addDays(30));
-        $this->dispatch('notify', message: ['status' => 'error', 'message' => $pesan]);
-    }
 }; ?>
 
 <div>
@@ -146,53 +68,6 @@ new #[Layout('layouts.app')] class extends Component
     <div class="row">
         <div class="col-12">
             <div class="card">
-                @if (auth()->user()?->can('mata-kuliah:tambah') && auth()->user()?->can('mata-kuliah:edit'))
-                    <div class="card-header">
-                        <h5 class="mb-1">Sinkronisasi Mata Kuliah</h5>
-                        <p class="text-muted mb-0">Kode, nama, dan SKS diperbarui dari API. Status, deskripsi, dan data lokal yang tidak dikirim API tetap dipertahankan.</p>
-                    </div>
-                    <div class="card-body border-bottom">
-                        <form wire:submit="sinkronkan">
-                            <div class="row g-3 align-items-end">
-                                <div class="col-md-7">
-                                    <label class="form-label" for="prodi-sinkronisasi">Program Studi</label>
-                                    <select id="prodi-sinkronisasi" class="form-select @error('prodi_id') is-invalid @enderror" wire:model="prodi_id">
-                                        <option value="">Pilih prodi</option>
-                                        @foreach ($prodi as $item)
-                                            <option value="{{ $item->id_prodi }}">{{ $item->kode }} - {{ $item->nama }}</option>
-                                        @endforeach
-                                    </select>
-                                    @error('prodi_id') <div class="invalid-feedback">{{ $message }}</div> @enderror
-                                    <div class="form-text">Kode prodi lokal harus sama dengan <code>kd_prodi</code> API.</div>
-                                </div>
-                                <div class="col-md-5 text-md-end">
-                                    <button type="submit" class="btn btn-primary" wire:loading.attr="disabled" wire:target="sinkronkan">
-                                        <span wire:loading.remove wire:target="sinkronkan"><i class="ri-refresh-line"></i> Sinkronkan Mata Kuliah</span>
-                                        <span wire:loading wire:target="sinkronkan">Sedang menyinkronkan...</span>
-                                    </button>
-                                </div>
-                            </div>
-                        </form>
-
-                        @if ($hasil_sinkronisasi)
-                            <div class="alert {{ $hasil_sinkronisasi['status'] === 'success' ? 'alert-success' : 'alert-danger' }} mt-3 mb-0" role="status">
-                                <div class="fw-semibold">Sinkronisasi {{ $hasil_sinkronisasi['selesai_pada'] }}</div>
-                                <div>{{ $hasil_sinkronisasi['pesan'] }}</div>
-                                @if ($hasil_sinkronisasi['status'] === 'success')
-                                    <div class="small mt-1">
-                                        Prodi: {{ $hasil_sinkronisasi['prodi'] }} ·
-                                        Diterima: {{ $hasil_sinkronisasi['diterima'] }} ·
-                                        Unik: {{ $hasil_sinkronisasi['unik'] }} ·
-                                        Dibuat: {{ $hasil_sinkronisasi['dibuat'] }} ·
-                                        Diubah: {{ $hasil_sinkronisasi['diubah'] }} ·
-                                        Dipulihkan: {{ $hasil_sinkronisasi['dipulihkan'] }} ·
-                                        Tetap: {{ $hasil_sinkronisasi['tetap'] }}
-                                    </div>
-                                @endif
-                            </div>
-                        @endif
-                    </div>
-                @endif
                 <div class="card-body">
                     <div class="d-flex align-items-center justify-content-between mb-3">
                         <h5 class="mb-0">Daftar Mata Kuliah</h5>

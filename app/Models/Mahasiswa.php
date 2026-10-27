@@ -48,6 +48,11 @@ class Mahasiswa extends Model
         return $this->hasMany(PesertaBlok::class, 'mahasiswa_id', 'id_mahasiswa');
     }
 
+    public function anggota_kelas_kuliah(): HasMany
+    {
+        return $this->hasMany(AnggotaKelasKuliah::class, 'mahasiswa_id', 'id_mahasiswa');
+    }
+
     public function status_registrasi(): HasMany
     {
         return $this->hasMany(StatusRegistrasiMahasiswa::class, 'mahasiswa_id', 'id_mahasiswa');

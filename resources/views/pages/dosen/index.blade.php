@@ -2,14 +2,9 @@
 
 use App\Exports\ArrayTemplateExport;
 use App\Imports\DosenImport;
-use App\Models\Prodi;
 use App\Support\Akademik\Sync\SinkronisasiDosen;
-use Illuminate\Database\Query\Builder;
-use Illuminate\Support\Facades\Cache;
-use Illuminate\Validation\Rule;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Locked;
-use Livewire\Attributes\On;
 use Livewire\Component;
 use Livewire\WithFileUploads;
 use Maatwebsite\Excel\Facades\Excel;
@@ -20,26 +15,14 @@ new #[Layout('layouts.app')] class extends Component
 
     public $importFile;
 
-    public string $prodi_id = '';
-
     public string $pencarian_api = '';
-
-    public $prodi = [];
 
     #[Locked]
     public array $kandidat_api = [];
 
-    #[Locked]
-    public ?array $hasil_sinkronisasi = null;
-
     public function mount(): void
     {
         abort_unless(auth()->user()?->can('dosen:'), 403);
-        $this->prodi = Prodi::query()
-            ->where('status', 'aktif')
-            ->orderBy('nama')
-            ->get(['id_prodi', 'kode', 'nama']);
-        $this->hasil_sinkronisasi = Cache::get(SinkronisasiDosen::cacheKey());
     }
 
     public function import()
@@ -68,33 +51,6 @@ new #[Layout('layouts.app')] class extends Component
             ['nidn', 'nip', 'nama', 'email', 'no_hp', 'gelar_depan', 'gelar_belakang', 'bidang_keahlian', 'kode_prodi', 'status'],
             ['1234567890', '198001012006041001', 'Nama Dosen Contoh', 'dosen@example.com', '081234567890', 'dr.', 'M.Kes.', 'Ilmu Kedokteran Dasar', 'PSPD', 'aktif'],
         ]), 'template-import-dosen.xlsx');
-    }
-
-    public function sinkronkan(SinkronisasiDosen $sinkronisasi): void
-    {
-        $this->bolehSinkron();
-        $this->validate([
-            'prodi_id' => [
-                'required',
-                Rule::exists('prodi', 'id_prodi')->where(fn (Builder $query) => $query
-                    ->where('status', 'aktif')
-                    ->whereNull('deleted_at')),
-            ],
-        ], [
-            'prodi_id.required' => 'Program studi wajib dipilih.',
-            'prodi_id.exists' => 'Program studi aktif tidak ditemukan.',
-        ]);
-
-        try {
-            $prodi = Prodi::query()->findOrFail((int) $this->prodi_id);
-            $this->hasil_sinkronisasi = $sinkronisasi->handle($prodi);
-            $this->sinkronisasiBerhasil();
-        } catch (DomainException $e) {
-            $this->simpanHasilGagal($e->getMessage());
-        } catch (Throwable $e) {
-            report($e);
-            $this->simpanHasilGagal('Sinkronisasi dosen gagal. Periksa koneksi dan format data API.');
-        }
     }
 
     public function cariDosenApi(SinkronisasiDosen $sinkronisasi): void
@@ -128,57 +84,21 @@ new #[Layout('layouts.app')] class extends Component
         $this->bolehSinkron();
 
         try {
-            $this->hasil_sinkronisasi = $sinkronisasi->tambah($token);
+            $hasil = $sinkronisasi->tambah($token);
             $this->reset('pencarian_api', 'kandidat_api');
-            $this->sinkronisasiBerhasil();
+            $this->dispatch('dosen-disinkronkan');
+            $this->dispatch('notify', message: ['status' => 'success', 'message' => $hasil['pesan']]);
         } catch (DomainException $e) {
-            $this->simpanHasilGagal($e->getMessage());
+            $this->dispatch('notify', message: ['status' => 'error', 'message' => $e->getMessage()]);
         } catch (Throwable $e) {
             report($e);
-            $this->simpanHasilGagal('Penambahan dosen dari API gagal. Periksa koneksi dan format data API.');
+            $this->dispatch('notify', message: ['status' => 'error', 'message' => 'Penambahan dosen dari API gagal. Periksa koneksi dan format data API.']);
         }
-    }
-
-    #[On('dosen-disinkronkan')]
-    public function muatHasilSinkronisasi(): void
-    {
-        $this->hasil_sinkronisasi = Cache::get(SinkronisasiDosen::cacheKey());
     }
 
     private function bolehSinkron(): void
     {
         abort_unless(auth()->user()?->can('dosen:tambah') && auth()->user()?->can('dosen:edit'), 403);
-    }
-
-    private function sinkronisasiBerhasil(): void
-    {
-        $this->dispatch('dosen-disinkronkan');
-        $this->dispatch('notify', message: [
-            'status' => 'success',
-            'message' => $this->hasil_sinkronisasi['pesan'],
-        ]);
-    }
-
-    private function simpanHasilGagal(string $pesan): void
-    {
-        $this->hasil_sinkronisasi = [
-            'status' => 'error',
-            'prodi' => null,
-            'selesai_pada' => now()->format('d-m-Y H:i:s'),
-            'diterima' => 0,
-            'unik' => 0,
-            'dibuat' => 0,
-            'diubah' => 0,
-            'dipulihkan' => 0,
-            'tetap' => 0,
-            'dilewati' => 0,
-            'rincian' => [],
-            'pesan' => $pesan,
-        ];
-
-        Cache::put(SinkronisasiDosen::cacheKey(), $this->hasil_sinkronisasi, now()->addDays(30));
-        $this->dispatch('dosen-disinkronkan');
-        $this->dispatch('notify', message: ['status' => 'error', 'message' => $pesan]);
     }
 }; ?>
 
@@ -195,64 +115,15 @@ new #[Layout('layouts.app')] class extends Component
         </div>
     </div>
 
-    @if (auth()->user()?->can('dosen:tambah') && auth()->user()?->can('dosen:edit'))
-        <div class="card">
-            <div class="card-header"><h5 class="mb-0">Sinkronisasi API</h5></div>
-            <div class="card-body">
-                <form wire:submit="sinkronkan" class="row g-2 align-items-end">
-                    <div class="col-md-6">
-                        <label for="prodi-sync-dosen" class="form-label">Program Studi</label>
-                        <select id="prodi-sync-dosen" wire:model="prodi_id" class="form-select">
-                            <option value="">Pilih program studi</option>
-                            @foreach ($prodi as $item)
-                                <option value="{{ $item->id_prodi }}">{{ $item->kode }} - {{ $item->nama }}</option>
-                            @endforeach
-                        </select>
-                        @error('prodi_id') <div class="small text-danger mt-1">{{ $message }}</div> @enderror
-                    </div>
-                    <div class="col-md-auto">
-                        <button type="submit" class="btn btn-primary" wire:loading.attr="disabled" wire:target="sinkronkan">
-                            <span wire:loading.remove wire:target="sinkronkan"><i class="ri-refresh-line"></i> Sync Prodi</span>
-                            <span wire:loading wire:target="sinkronkan">Menyinkronkan...</span>
-                        </button>
-                    </div>
-                    <div class="col-md-auto">
-                        <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modal-api-dosen">
-                            <i class="ri-user-search-line"></i> Tambah dari API
-                        </button>
-                    </div>
-                </form>
-            </div>
-            @if ($hasil_sinkronisasi)
-                <div class="card-footer">
-                    <div class="alert alert-{{ $hasil_sinkronisasi['status'] === 'success' ? 'success' : 'danger' }} mb-0">
-                        <strong>{{ $hasil_sinkronisasi['pesan'] }}</strong>
-                        <div class="small mt-1">
-                            {{ $hasil_sinkronisasi['selesai_pada'] }} · Diterima: {{ $hasil_sinkronisasi['diterima'] }} ·
-                            Dibuat: {{ $hasil_sinkronisasi['dibuat'] }} · Diubah: {{ $hasil_sinkronisasi['diubah'] }} ·
-                            Dipulihkan: {{ $hasil_sinkronisasi['dipulihkan'] }} · Tetap: {{ $hasil_sinkronisasi['tetap'] }} ·
-                            Dilewati: {{ $hasil_sinkronisasi['dilewati'] }}
-                        </div>
-                        @if ($hasil_sinkronisasi['rincian'])
-                            <details class="small mt-2">
-                                <summary>Rincian data dilewati</summary>
-                                <ul class="mb-0 mt-1">
-                                    @foreach ($hasil_sinkronisasi['rincian'] as $rincian)<li>{{ $rincian }}</li>@endforeach
-                                </ul>
-                            </details>
-                        @endif
-                    </div>
-                </div>
-            @endif
-        </div>
-    @endif
-
     <div class="card">
         <div class="card-body">
             <div class="d-flex align-items-center justify-content-between mb-3">
                 <h5 class="mb-0">Daftar Dosen</h5>
                 <div class="d-flex justify-content-end gap-2">
                     @if (auth()->user()?->can('dosen:tambah') && auth()->user()?->can('dosen:edit'))
+                        <button type="button" class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modal-api-dosen">
+                            <i class="ri-user-search-line"></i> Tambah dari API
+                        </button>
                         <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modal-import-dosen">
                             <i class="ri-upload-2-line"></i> Import
                         </button>

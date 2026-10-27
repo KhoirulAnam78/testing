@@ -134,6 +134,11 @@ Route::middleware(['auth', 'route.permission'])->group(function () {
     Route::livewire('dpna-blok/detail/{id}', 'pages::dpna-blok.detail')
         ->name('dpna-blok.detail');
 
+    Route::livewire('sinkronisasi', 'pages::sinkronisasi.index')
+        ->name('sinkronisasi.index');
+    Route::livewire('sinkronisasi/kelas', 'pages::sinkronisasi.kelas-kuliah')
+        ->name('sinkronisasi-kelas.index');
+
     // Portal Saya: halaman yang di-scope ke user yang login, bukan CRUD master data.
     Route::livewire('pertemuan-saya', 'pages::pertemuan-saya.index')
         ->name('pertemuan-saya.index');

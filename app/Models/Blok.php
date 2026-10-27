@@ -136,6 +136,11 @@ class Blok extends Model
         return $this->hasMany(PesertaBlok::class, 'blok_id', 'id');
     }
 
+    public function kelas_kuliah(): HasMany
+    {
+        return $this->hasMany(KelasKuliah::class, 'blok_id', 'id');
+    }
+
     public function kelompok_blok(): HasMany
     {
         return $this->hasMany(KelompokBlok::class, 'blok_id', 'id');

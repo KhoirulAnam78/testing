@@ -200,6 +200,47 @@ class AkademikClient
         throw new DomainException('Token API tidak dapat diperbarui.');
     }
 
+    /** @param array<string, mixed> $payload */
+    public function writeRaw(string $method, string $path, array $payload): Response
+    {
+        $method = strtoupper($method);
+        if (! in_array($method, ['POST', 'PUT'], true)) {
+            throw new DomainException('Method tulis API hanya boleh POST atau PUT.');
+        }
+
+        $integrasi = ApiIntegrasi::query()->find(1);
+        if (! $integrasi || ! $integrasi->is_aktif) {
+            throw new DomainException('Integrasi API belum tersedia atau belum diaktifkan.');
+        }
+        if (parse_url($integrasi->base_url, PHP_URL_SCHEME) !== 'https') {
+            throw new DomainException('Base URL wajib memakai HTTPS.');
+        }
+
+        $url = rtrim($integrasi->base_url, '/').'/'.ltrim($path, '/');
+
+        try {
+            $response = Http::acceptJson()
+                ->asJson()
+                ->withToken($this->accessToken($integrasi))
+                ->connectTimeout(min(10, $integrasi->timeout))
+                ->timeout($integrasi->timeout)
+                ->withoutRedirecting()
+                ->send($method, $url, ['json' => $payload]);
+        } catch (ConnectionException $exception) {
+            throw new AkademikWriteUnknownException('Hasil request tulis tidak diketahui. Rekonsiliasi dengan GET sebelum mengirim ulang.', previous: $exception);
+        }
+
+        if ($response->redirect()) {
+            throw new DomainException('API mengembalikan redirect yang tidak diizinkan.');
+        }
+        if (in_array($response->status(), [401, 403], true)) {
+            $this->forgetToken();
+            throw new DomainException('API menolak request tulis. Periksa kredensial dan hak akses token.');
+        }
+
+        return $response;
+    }
+
     private function accessToken(ApiIntegrasi $integrasi): string
     {
         $cached = Cache::get(self::CACHE_KEY);

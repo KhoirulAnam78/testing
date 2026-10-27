@@ -24,6 +24,28 @@ class MateriRinciBlok extends Model
         ];
     }
 
+    /** @param array<int, array<string, mixed>> $materi */
+    public static function pertemuanBerikutnya(array $materi): int
+    {
+        return collect($materi)
+            ->flatMap(fn (array $item) => $item['rinci'] ?? [])
+            ->max(fn (array $item) => (int) ($item['pertemuan_ke'] ?? 0)) + 1;
+    }
+
+    /** @param array<int, array<string, mixed>> $materi */
+    public static function pertemuanDuplikat(array $materi): array
+    {
+        return collect($materi)
+            ->flatMap(fn (array $item) => $item['rinci'] ?? [])
+            ->pluck('pertemuan_ke')
+            ->filter(fn ($nomor) => $nomor !== null && $nomor !== '')
+            ->map(fn ($nomor) => (int) $nomor)
+            ->duplicates()
+            ->unique()
+            ->values()
+            ->all();
+    }
+
     public function materi_blok(): BelongsTo
     {
         return $this->belongsTo(MateriBlok::class, 'materi_blok_id', 'id_materi_blok');

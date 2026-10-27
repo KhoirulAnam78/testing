@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Prodi extends Model
@@ -39,5 +40,17 @@ class Prodi extends Model
     public function kurikulum(): HasMany
     {
         return $this->hasMany(Kurikulum::class, 'prodi_id', 'id_prodi');
+    }
+
+    public function kelas_kuliah(): HasManyThrough
+    {
+        return $this->hasManyThrough(
+            KelasKuliah::class,
+            MataKuliah::class,
+            'prodi_id',
+            'mata_kuliah_id',
+            'id_prodi',
+            'id',
+        );
     }
 }

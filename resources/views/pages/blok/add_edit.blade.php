@@ -498,7 +498,7 @@ new #[Layout('layouts.app')] class extends Component
     public function addRinci($aturanIndex, $materiIndex): void
     {
         $rinci = $this->aturan[$aturanIndex]['materi'][$materiIndex]['rinci'] ?? [];
-        $pertemuanKe = collect($rinci)->max(fn ($item) => (int) ($item['pertemuan_ke'] ?? 0)) + 1;
+        $pertemuanKe = MateriRinciBlok::pertemuanBerikutnya($this->aturan[$aturanIndex]['materi'] ?? []);
 
         $this->aturan[$aturanIndex]['materi'][$materiIndex]['rinci'][] = $this->emptyRinci(
             $aturanIndex,
@@ -1215,6 +1215,13 @@ new #[Layout('layouts.app')] class extends Component
         ]);
 
         foreach ($payload['aturan'] as $aturanIndex => $aturan) {
+            $duplikat = MateriRinciBlok::pertemuanDuplikat($aturan['materi']);
+            if ($duplikat !== []) {
+                throw ValidationException::withMessages([
+                    "aturan.$aturanIndex.materi" => 'Nomor pertemuan harus unik dalam satu kegiatan. Duplikat: '.implode(', ', $duplikat).'.',
+                ]);
+            }
+
             foreach ($aturan['materi'] as $materiIndex => $materi) {
                 foreach ($materi['rinci'] ?? [] as $rinciIndex => $rinci) {
                     $prefix = "aturan.$aturanIndex.materi.$materiIndex.rinci.$rinciIndex";
@@ -1231,6 +1238,7 @@ new #[Layout('layouts.app')] class extends Component
         DB::transaction(function () use ($payload) {
             foreach ($payload['aturan'] as $aturanIndex => $aturan) {
                 $aturanId = $this->aturan[$aturanIndex]['id'];
+                AturanKegiatanBlok::query()->whereKey($aturanId)->lockForUpdate()->firstOrFail();
                 $savedMateriIds = [];
 
                 foreach ($aturan['materi'] as $materiIndex => $materi) {
@@ -1455,6 +1463,17 @@ new #[Layout('layouts.app')] class extends Component
 
         foreach ($payload['aturan'] as $aturanIndex => $aturan) {
             $komponen = collect($aturan['komponen'] ?? []);
+
+            $duplikatPertemuan = MateriRinciBlok::pertemuanDuplikat($aturan['materi'] ?? []);
+            if ($duplikatPertemuan !== []) {
+                $this->failOnMateriTab(
+                    $aturanIndex,
+                    "aturan.$aturanIndex.materi",
+                    'Nomor pertemuan harus unik dalam satu kegiatan. Duplikat: '.implode(', ', $duplikatPertemuan).'.'
+                );
+
+                return;
+            }
 
             if ($komponen->pluck('komponen_penilaian_id')->filter()->duplicates()->isNotEmpty()) {
                 $this->failOnPenilaianTab($aturanIndex, "aturan.$aturanIndex.komponen", 'Komponen penilaian tidak boleh duplikat dalam satu kegiatan.');

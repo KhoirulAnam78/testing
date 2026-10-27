@@ -46,43 +46,7 @@
         </div>
     </div>
 
-    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
-        <div class="text-muted small">
-            Pembayaran lunas (L) disinkronkan sebagai Aktif. Mahasiswa lokal yang tidak ditemukan atau belum lunas menjadi Belum aktif.
-        </div>
-        <button
-            type="button"
-            class="btn btn-primary"
-            wire:click="sinkronkan"
-            wire:loading.attr="disabled"
-            wire:target="sinkronkan"
-            @disabled(! $filter_semester_id)
-        >
-            <span wire:loading.remove wire:target="sinkronkan"><i class="ri-refresh-line"></i> Sinkronkan Status</span>
-            <span wire:loading wire:target="sinkronkan">Sedang menyinkronkan...</span>
-        </button>
-    </div>
-
     @error('filter_semester_id') <div class="alert alert-danger">{{ $message }}</div> @enderror
-
-    @if ($hasil_sinkronisasi)
-        <div class="alert {{ $hasil_sinkronisasi['status'] === 'success' ? 'alert-success' : 'alert-danger' }}">
-            <div class="fw-semibold">
-                Sinkronisasi {{ $hasil_sinkronisasi['semester'] }} · {{ $hasil_sinkronisasi['selesai_pada'] }}
-            </div>
-            <div class="small mt-1">{{ $hasil_sinkronisasi['pesan'] }}</div>
-            @if ($hasil_sinkronisasi['status'] === 'success')
-                <div class="d-flex flex-wrap gap-3 small mt-2">
-                    <span>Diterima: <strong>{{ $hasil_sinkronisasi['diterima'] }}</strong></span>
-                    <span>Dibuat: <strong>{{ $hasil_sinkronisasi['dibuat'] }}</strong></span>
-                    <span>Diubah: <strong>{{ $hasil_sinkronisasi['diubah'] }}</strong></span>
-                    <span>Tetap: <strong>{{ $hasil_sinkronisasi['tetap'] }}</strong></span>
-                    <span>Dilewati: <strong>{{ $hasil_sinkronisasi['dilewati'] }}</strong></span>
-                    <span>Gagal: <strong>{{ $hasil_sinkronisasi['gagal'] }}</strong></span>
-                </div>
-            @endif
-        </div>
-    @endif
 
     @if (! $filter_semester_id)
         <div class="alert alert-info mb-0">Pilih semester untuk melihat dan mengatur status registrasi.</div>
